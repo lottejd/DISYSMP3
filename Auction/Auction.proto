@@ -4,7 +4,6 @@ package Auction;
 option go_package = "./Auction";
 
 service AuctionService {
-
     rpc Bid (bidRequest) returns (bidResponse);
     rpc Result (resultRequest) returns (resultResponse);
     rpc KillPR (killPRRequest) returns (emptyResponse);
@@ -12,21 +11,17 @@ service AuctionService {
 
 
 message bidRequest {
-    
+    int32 amount = 1;
 }
 message resultRequest {
-    
+    int32 auctionID = 1;
 }
-message killPRRequest  {
+message killPRRequest {}
 
+message bidResponse {
+    bool success = 1;
 }
-
-message bidResponse{
-    
-}
-
 message resultResponse {
-    
+    int32 auctionID = 1;
 }
-
 message emptyResponse {}
