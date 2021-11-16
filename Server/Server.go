@@ -41,6 +41,10 @@ func (s *Server) Bid(ctx context.Context, message *Auction.BidRequest) (*Auction
 
 }
 
+func (s *Server) Result() {
+
+}
+
 func Logger(message string, logFileName string) {
 	f, err := os.OpenFile(logFileName, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
