@@ -19,7 +19,7 @@ const (
 )
 
 var (
-	id int32
+	clientID int32
 )
 
 func main() {
@@ -46,6 +46,10 @@ func Result(client *Auction.AuctionServiceClient) {
 
 }
 
+func KillPR(client *Auction.AuctionServiceClient) {
+
+}
+
 func Logger(message string, logFileName string) {
 	f, err := os.OpenFile(logFileName, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
@@ -59,9 +63,7 @@ func Logger(message string, logFileName string) {
 
 func listenForInput(client *Auction.AuctionServiceClient, ctx context.Context) {
 	for {
-		// to ensure "enter" has been hit before publishing - skud ud til Mie
 		reader, err := bufio.NewReader(os.Stdin).ReadString('\n')
-		// remove newline windows format "\r\n"
 		input := strings.TrimSuffix(reader, "\r\n")
 		if err != nil {
 			Logger("bad bufio input", logFileName)

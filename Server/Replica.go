@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/lottejd/DISYSMP3/Auction"
-	"google.golang.org/grpc"
 	"log"
 	"strconv"
+	"time"
+
+	"github.com/lottejd/DISYSMP3/Auction"
+	"google.golang.org/grpc"
 )
 
 type Replica struct {
@@ -43,12 +45,16 @@ func (rep *Replica) askNextReplica() {
 	}
 }
 
-func pingPrimary() {
+func (rep *Replica) pingPrimary() {
 	for {
-
+		time.Sleep(time.Second(5))
+		//send request to primary replica
 	}
 }
 
 func (rep *Replica) reportToPrimary() {
-	
+	//send response to primary replica
+}
+
+func (rep *Replica) die() {
 }
