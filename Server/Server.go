@@ -2,16 +2,22 @@ package main
 
 import (
 	"context"
-	"github.com/lottejd/DISYSMP3/Auction"
-	"google.golang.org/grpc"
 	"log"
 	"net"
 	"os"
+	"time"
+
+	"github.com/lottejd/DISYSMP3/Auction"
+	"google.golang.org/grpc"
 )
 
 const (
 	port          = ":8080"
 	serverLogFile = "serverLog"
+)
+
+var (
+	currentAuctionId int32
 )
 
 type Server struct {
@@ -22,6 +28,7 @@ func main() {
 
 	//init
 	grpcServer := grpc.NewServer()
+	currentAuctionId = 0
 
 	//setup listen on port
 	lis, err := net.Listen("tcp", port)
@@ -35,13 +42,19 @@ func main() {
 		log.Fatalf("Failed to serve gRPC server over port %s  %v", port, err)
 	}
 
+	for {
+		StartAuction()
+		time.Sleep(time.Minute * 5)
+		EndAuction()
+	}
+
 }
 
 func (s *Server) Bid(ctx context.Context, message *Auction.BidRequest) (*Auction.BidResponse, error) {
 
 }
 
-func (s *Server) Result() {
+func (s *Server) Result(ctx context.Context, message *Auction.ResultRequest) (*Auction.ResultResponse, error) {
 
 }
 
@@ -54,4 +67,12 @@ func Logger(message string, logFileName string) {
 
 	log.SetOutput(f)
 	log.Println(message)
+}
+
+func StartAuction() {
+	currentAuctionId++
+}
+
+func EndAuction() {
+
 }
