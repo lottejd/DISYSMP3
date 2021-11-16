@@ -1,0 +1,32 @@
+syntax = "proto3";
+package Auction;
+
+option go_package = "./Auction";
+
+service AuctionService {
+
+    rpc Bid (bidRequest) returns (bidResponse);
+    rpc Result (resultRequest) returns (resultResponse);
+    rpc KillPR (killPRRequest) returns (emptyResponse);
+}
+
+
+message bidRequest {
+    
+}
+message resultRequest {
+    
+}
+message killPRRequest  {
+
+}
+
+message bidResponse{
+    
+}
+
+message resultResponse {
+    
+}
+
+message emptyResponse {}
