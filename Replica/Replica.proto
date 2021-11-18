@@ -1,0 +1,22 @@
+syntax = "proto3";
+package Replica;
+
+option go_package = "./Replica";
+
+service ReplicaService{
+    rpc CheckLeaderStatus (getStatus) returns (leaderStatus);
+    rpc ChooseNewLeader (wantToLeadRequest) returns (getStatus);
+}
+
+message getStatus {
+    int32 serverId = 1;
+}
+
+message leaderStatus {
+    bool alive = 1;
+    int32 serverId = 2;
+}
+
+message wantToLeadRequest{
+    int32 serverId = 1;
+}

@@ -20,7 +20,6 @@ const _ = grpc.SupportPackageIsVersion7
 type AuctionServiceClient interface {
 	Bid(ctx context.Context, in *BidRequest, opts ...grpc.CallOption) (*BidResponse, error)
 	Result(ctx context.Context, in *ResultRequest, opts ...grpc.CallOption) (*ResultResponse, error)
-	KillPR(ctx context.Context, in *KillPRRequest, opts ...grpc.CallOption) (*EmptyResponse, error)
 }
 
 type auctionServiceClient struct {
@@ -49,22 +48,12 @@ func (c *auctionServiceClient) Result(ctx context.Context, in *ResultRequest, op
 	return out, nil
 }
 
-func (c *auctionServiceClient) KillPR(ctx context.Context, in *KillPRRequest, opts ...grpc.CallOption) (*EmptyResponse, error) {
-	out := new(EmptyResponse)
-	err := c.cc.Invoke(ctx, "/Auction.AuctionService/KillPR", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // AuctionServiceServer is the server API for AuctionService service.
 // All implementations must embed UnimplementedAuctionServiceServer
 // for forward compatibility
 type AuctionServiceServer interface {
 	Bid(context.Context, *BidRequest) (*BidResponse, error)
 	Result(context.Context, *ResultRequest) (*ResultResponse, error)
-	KillPR(context.Context, *KillPRRequest) (*EmptyResponse, error)
 	mustEmbedUnimplementedAuctionServiceServer()
 }
 
@@ -77,9 +66,6 @@ func (UnimplementedAuctionServiceServer) Bid(context.Context, *BidRequest) (*Bid
 }
 func (UnimplementedAuctionServiceServer) Result(context.Context, *ResultRequest) (*ResultResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Result not implemented")
-}
-func (UnimplementedAuctionServiceServer) KillPR(context.Context, *KillPRRequest) (*EmptyResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method KillPR not implemented")
 }
 func (UnimplementedAuctionServiceServer) mustEmbedUnimplementedAuctionServiceServer() {}
 
@@ -130,24 +116,6 @@ func _AuctionService_Result_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuctionService_KillPR_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(KillPRRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AuctionServiceServer).KillPR(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/Auction.AuctionService/KillPR",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuctionServiceServer).KillPR(ctx, req.(*KillPRRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // AuctionService_ServiceDesc is the grpc.ServiceDesc for AuctionService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -162,10 +130,6 @@ var AuctionService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Result",
 			Handler:    _AuctionService_Result_Handler,
-		},
-		{
-			MethodName: "KillPR",
-			Handler:    _AuctionService_KillPR_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
