@@ -1,13 +1,11 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"log"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	auction "github.com/lottejd/DISYSMP3/Auction"
@@ -82,20 +80,13 @@ func Logger(message string, logFileName string) {
 
 func listenForInput(client auction.AuctionServiceClient, ctx context.Context) {
 	for {
-		reader, err := bufio.NewReader(os.Stdin).ReadString('\n')
-		input := strings.TrimSuffix(reader, "\r\n")
-		if err != nil {
-			Logger("bad bufio input", logFileName)
-		}
+		var input string
+		fmt.Scanln(&input)
 		if len(input) > 0 {
 			switch input {
 			case "bid":
 				fmt.Println("How much would you like to bid?")
-				reader, err := bufio.NewReader(os.Stdin).ReadString('\n')
-				input := strings.TrimSuffix(reader, "\r\n")
-				if err != nil {
-					Logger("bad bufio input", logFileName)
-				}
+				fmt.Scanln(&input)
 				bid, err := strconv.Atoi(input)
 				if err != nil {
 					log.Fatal(err)

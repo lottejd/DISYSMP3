@@ -21,6 +21,8 @@ type ReplicaServiceClient interface {
 	CheckLeaderStatus(ctx context.Context, in *GetStatusRequest, opts ...grpc.CallOption) (*LeaderStatusResponse, error)
 	ChooseNewLeader(ctx context.Context, in *WantToLeadRequest, opts ...grpc.CallOption) (*StatusResponse, error)
 	CheckStatus(ctx context.Context, in *GetStatusRequest, opts ...grpc.CallOption) (*StatusResponse, error)
+	CreateNewReplica(ctx context.Context, in *EmptyRequest, opts ...grpc.CallOption) (*ReplicaInfo, error)
+	WriteToLog(ctx context.Context, in *Auction, opts ...grpc.CallOption) (*Ack, error)
 }
 
 type replicaServiceClient struct {
@@ -58,6 +60,24 @@ func (c *replicaServiceClient) CheckStatus(ctx context.Context, in *GetStatusReq
 	return out, nil
 }
 
+func (c *replicaServiceClient) CreateNewReplica(ctx context.Context, in *EmptyRequest, opts ...grpc.CallOption) (*ReplicaInfo, error) {
+	out := new(ReplicaInfo)
+	err := c.cc.Invoke(ctx, "/Replica.ReplicaService/CreateNewReplica", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *replicaServiceClient) WriteToLog(ctx context.Context, in *Auction, opts ...grpc.CallOption) (*Ack, error) {
+	out := new(Ack)
+	err := c.cc.Invoke(ctx, "/Replica.ReplicaService/WriteToLog", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ReplicaServiceServer is the server API for ReplicaService service.
 // All implementations must embed UnimplementedReplicaServiceServer
 // for forward compatibility
@@ -65,6 +85,8 @@ type ReplicaServiceServer interface {
 	CheckLeaderStatus(context.Context, *GetStatusRequest) (*LeaderStatusResponse, error)
 	ChooseNewLeader(context.Context, *WantToLeadRequest) (*StatusResponse, error)
 	CheckStatus(context.Context, *GetStatusRequest) (*StatusResponse, error)
+	CreateNewReplica(context.Context, *EmptyRequest) (*ReplicaInfo, error)
+	WriteToLog(context.Context, *Auction) (*Ack, error)
 	mustEmbedUnimplementedReplicaServiceServer()
 }
 
@@ -80,6 +102,12 @@ func (UnimplementedReplicaServiceServer) ChooseNewLeader(context.Context, *WantT
 }
 func (UnimplementedReplicaServiceServer) CheckStatus(context.Context, *GetStatusRequest) (*StatusResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CheckStatus not implemented")
+}
+func (UnimplementedReplicaServiceServer) CreateNewReplica(context.Context, *EmptyRequest) (*ReplicaInfo, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateNewReplica not implemented")
+}
+func (UnimplementedReplicaServiceServer) WriteToLog(context.Context, *Auction) (*Ack, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method WriteToLog not implemented")
 }
 func (UnimplementedReplicaServiceServer) mustEmbedUnimplementedReplicaServiceServer() {}
 
@@ -148,6 +176,42 @@ func _ReplicaService_CheckStatus_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ReplicaService_CreateNewReplica_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EmptyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ReplicaServiceServer).CreateNewReplica(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/Replica.ReplicaService/CreateNewReplica",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ReplicaServiceServer).CreateNewReplica(ctx, req.(*EmptyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ReplicaService_WriteToLog_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Auction)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ReplicaServiceServer).WriteToLog(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/Replica.ReplicaService/WriteToLog",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ReplicaServiceServer).WriteToLog(ctx, req.(*Auction))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ReplicaService_ServiceDesc is the grpc.ServiceDesc for ReplicaService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -166,6 +230,14 @@ var ReplicaService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CheckStatus",
 			Handler:    _ReplicaService_CheckStatus_Handler,
+		},
+		{
+			MethodName: "CreateNewReplica",
+			Handler:    _ReplicaService_CreateNewReplica_Handler,
+		},
+		{
+			MethodName: "WriteToLog",
+			Handler:    _ReplicaService_WriteToLog_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

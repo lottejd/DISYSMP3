@@ -7,6 +7,22 @@ service ReplicaService{
     rpc CheckLeaderStatus (getStatusRequest) returns (leaderStatusResponse);
     rpc ChooseNewLeader (wantToLeadRequest) returns (statusResponse);
     rpc CheckStatus (getStatusRequest) returns (statusResponse);
+    rpc CreateNewReplica (emptyRequest) returns (replicaInfo);
+    rpc WriteToLog (auction) returns (ack);
+}
+
+message emptyRequest{
+
+}
+
+message ack {
+    string ack = 1;
+}
+
+message auction {
+    int32 bid = 1 ;
+    int32 bidId = 2; 
+    //timestamp pls
 }
 
 message getStatusRequest {
@@ -24,4 +40,11 @@ message wantToLeadRequest{
 
 message statusResponse{
     int32 serverId = 1;
+    repeated replicaInfo replicas = 2; 
+
+}
+
+message replicaInfo{
+    int32 serverId = 1;
+    int32 port = 2;
 }
