@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"strconv"
 	"time"
 
 	"github.com/lottejd/DISYSMP3/Auction"
@@ -35,9 +34,10 @@ func main() {
 	go Listen(server.port, &server)
 	go func() {
 		for {
-			fmt.Println("Display All Replicas")
-			server.DisplayAllReplicas()
+			go server.DisplayAllReplicas()
 			time.Sleep(time.Second * 5)
+			go server.FindServers()
+
 		}
 	}()
 
@@ -54,30 +54,25 @@ func main() {
 	} else {
 		for _, s := range server.allServers {
 			if server.id != s.id {
-				response, _ := s.CheckStatus(ctx, &Replica.GetStatusRequest{ServerId: server.id})
-				if response.Primary {
-					server.SetPrimary()
+				client, _ := ConnectToReplicaClient(s.port)
+				response, _ := client.CheckStatus(ctx, &Replica.GetStatusRequest{ServerId: server.id})
+				if response.GetPrimary() {
+					temp := s
+					temp.SetPrimary()
+					server.allServers[s.id] = temp
 				}
 			}
 
 		}
-		fmt.Scanln()
-
 	}
-}
-
-func (s *Server) WriteToLog(ctx context.Context, auction *Replica.Auction) (*Replica.Ack, error) {
-	msg := fmt.Sprintf("HighestBid: %v, placed by: %v", auction.Bid, auction.BidId)
-	Logger(msg, ServerLogFile+strconv.Itoa(int(s.id)))
-	return &Replica.Ack{Ack: "ack"}, nil
+	fmt.Scanln()
 }
 
 func (s *Server) CheckStatus(ctx context.Context, request *Replica.GetStatusRequest) (*Replica.StatusResponse, error) {
 	// implement
 	replicas := s.ServerMapToReplicaInfoArray()
-	response := &Replica.StatusResponse{ServerId: s.id, Primary: s.primary, Replicas: replicas}
-
-	return response, nil
+	response := Replica.StatusResponse{ServerId: s.id, Primary: s.primary, Replicas: replicas}
+	return &response, nil
 }
 func (s *Server) ChooseNewLeader(ctx context.Context, request *Replica.WantToLeadRequest) (*Replica.StatusResponse, error) {
 	// implement
@@ -125,12 +120,10 @@ func (s *Server) CreateNewReplica(ctx context.Context, emptyRequest *Replica.Emp
 	// add new server to map
 	temp := CreateProxyReplica((highestId), (highestPort))
 	s.allServers[highestId] = *temp
-	fmt.Println(s.ToString())
 	return &response, nil
 }
 
 func Listen(port int32, s *Server) {
-
 	// start peer to peer service
 	go func() {
 		lis, _ := net.Listen("tcp", FormatAddress(port))

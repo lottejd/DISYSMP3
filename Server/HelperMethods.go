@@ -35,7 +35,6 @@ func Connect(port int32) (int32, *grpc.ClientConn) {
 
 	request := Replica.GetStatusRequest{ServerId: -1}
 	id, _ := client.CheckStatus(context.Background(), &request)
-	fmt.Println(id.GetServerId())
 	return id.GetServerId(), conn
 }
 
@@ -79,6 +78,15 @@ func (s *Server) SetPrimary() {
 	s.primary = true
 }
 
+func (s *Server) DisplayAllReplicas() {
+	fmt.Println("Display All Replicas")
+	for _, server := range s.allServers {
+		if server.alive {
+			fmt.Println(server.ToString())
+		}
+	}
+}
+
 // deprecated
 
 func EvalServerId(conn *grpc.ClientConn) int32 {
@@ -102,19 +110,3 @@ func EvalPort(conn *grpc.ClientConn) int32 {
 	}
 	return port
 }
-
-// func (s *Server) FindServers(){
-// 	for id, server := range s.allServers {
-// 		if server.id == s.id {
-// 			continue
-// 		}
-// 		serverId, conn := Connect(server.port)
-// 		if IsConnectable(conn) {
-// 			if serverId == id {
-// 				server.alive = true
-// 			}
-// 			continue
-// 		}
-// 		server.alive = false
-// 	}
-// }

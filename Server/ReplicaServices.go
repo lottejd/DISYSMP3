@@ -1,20 +1,26 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/lottejd/DISYSMP3/Replica"
 	"google.golang.org/grpc"
 )
 
-func EvalPrimary(conn *grpc.ClientConn) bool {
-	return !IsConnectable(conn)
+func (s *Server) WriteToLog(ctx context.Context, auction *Replica.Auction) (*Replica.Ack, error) {
+	msg := fmt.Sprintf("HighestBid: %v, placed by: %v", auction.Bid, auction.BidId)
+	Logger(msg, ServerLogFile+strconv.Itoa(int(s.id)))
+	return &Replica.Ack{Ack: "ack"}, nil
 }
-
-
 
 func IsConnectable(conn *grpc.ClientConn) bool {
 	return conn.GetState().String() != ConnectionNil
+}
+
+func EvalPrimary(conn *grpc.ClientConn) bool {
+	return !IsConnectable(conn)
 }
 
 func EvalServers(conn *grpc.ClientConn, replicaInfo *Replica.ReplicaInfo) map[int32]Server {
@@ -36,15 +42,6 @@ func (s *Server) ServerMapToReplicaInfoArray() []*Replica.ReplicaInfo {
 	return servers
 }
 
-func (s *Server) DisplayAllReplicas() {
-	for _, server := range s.allServers {
-		if server.alive {
-			fmt.Println(server.ToString())
-		}
-	}
-}
-
-
 func (s *Server) FindServers() {
 	for i := 0; i < 10; i++ {
 		if int(s.id) == i {
@@ -53,7 +50,6 @@ func (s *Server) FindServers() {
 		serverId, conn := Connect(int32(ServerPort + i))
 		if IsConnectable(conn) && s.allServers[int32(serverId)].port == 0 {
 			replica := CreateProxyReplica(serverId, int32(ServerPort+i))
-			fmt.Println(s.port)
 			s.AddReplica(replica)
 		}
 	}
