@@ -26,15 +26,9 @@ type Server struct {
 	id         int32
 	primary    bool
 	port       int32
-	allServers map[int32]*Server
+	allServers map[int32]Server
 	alive      bool
 	this       *AuctionType
-}
-
-type AuctionType struct {
-	highestBid    int32
-	highestBidder int32
-	done          bool
 }
 
 func main() {
@@ -49,7 +43,9 @@ func main() {
 	go Listen(server.port, &server)
 	go func() {
 		for {
-			server.findServers()
+			fmt.Println("finding allServers")
+			time.Sleep(time.Second * 5)
+			server.displayAllReplicas()
 			time.Sleep(time.Second * 5)
 		}
 	}()
@@ -58,14 +54,20 @@ func main() {
 	// skal rykkes ud i en go routine, i tilfæde primary dør bliver det her ikke kørt igen
 	fmt.Println(server.primary)
 	if server.primary {
+		server.allServers[server.id] = server
 		for {
 			server.StartAuction()
 			time.Sleep(time.Minute * 5)
 			server.EndAuction()
 		}
 	}
-	for {
-		fmt.Scanln()
+	fmt.Scanln()
+
+}
+
+func (s *Server) displayAllReplicas() {
+	for _, server := range s.allServers {
+		fmt.Println(server.ToString())
 	}
 }
 
@@ -88,7 +90,7 @@ func (s *Server) ChooseNewLeader(ctx context.Context, request *Replica.WantToLea
 func CreateReplica(conn *grpc.ClientConn) Server {
 	var primary bool
 	var port int32
-	var allServers map[int32]*Server
+	var allServers map[int32]Server
 
 	port = evalPort(conn)
 	primary = evalPrimary(conn)
@@ -98,6 +100,9 @@ func CreateReplica(conn *grpc.ClientConn) Server {
 	auction := AuctionType{0, -1, false} // fjern denne type auction køre gennemm log
 
 	return Server{id: id, primary: primary, port: port, allServers: allServers, alive: true, this: &auction}
+}
+func (s *Server) ToString() string {
+	return fmt.Sprintf("Server id: %v, server port: %v, server status: %v,", s.id, s.port, s.alive)
 }
 
 // ask leader for info to create a new replica
@@ -109,8 +114,9 @@ func (s *Server) CreateNewReplica(ctx context.Context, emptyRequest *Replica.Emp
 		highestPort = Max(highestPort, server.port)
 	}
 	response := Replica.ReplicaInfo{ServerId: (highestId + 1), Port: (highestPort + 1)}
-	s.allServers[highestId] = CreateTempReplica(highestId, highestPort)
-
+	temp := CreateTempReplica((highestId + 1), (highestPort + 1))
+	s.allServers[highestId] = *temp
+	fmt.Println(s.ToString())
 	return &response, nil
 }
 
@@ -192,6 +198,9 @@ func evalPrimary(conn *grpc.ClientConn) bool {
 
 func (s *Server) findServers() {
 	for id, server := range s.allServers {
+		if server.id == s.id {
+			continue
+		}
 		serverId, conn := connect(serverPort)
 		if conn.GetState().String() != connectionNil {
 			if serverId == id {
@@ -203,7 +212,7 @@ func (s *Server) findServers() {
 	}
 }
 
-func evalServers(conn *grpc.ClientConn) map[int32]*Server {
-	serverMap := make(map[int32]*Server)
+func evalServers(conn *grpc.ClientConn) map[int32]Server {
+	serverMap := make(map[int32]Server)
 	return serverMap
 }

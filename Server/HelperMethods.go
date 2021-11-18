@@ -6,6 +6,12 @@ import (
 	"os"
 )
 
+type AuctionType struct {
+	highestBid    int32
+	highestBidder int32
+	done          bool
+}
+
 func Logger(message string, logFileName string) {
 	f, err := os.OpenFile(logFileName, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {

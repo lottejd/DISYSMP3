@@ -4,11 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"strconv"
 	"time"
 
-	auction "github.com/lottejd/DISYSMP3/Auction"
+	"github.com/lottejd/DISYSMP3/Auction"
 	"google.golang.org/grpc"
 )
 
@@ -31,7 +30,7 @@ func main() {
 	defer conn.Close()
 
 	// create client
-	client := auction.NewAuctionServiceClient(conn)
+	client := Auction.NewAuctionServiceClient(conn)
 	ctx := context.Background()
 
 	go listenForInput(client, ctx)
@@ -42,8 +41,8 @@ func main() {
 
 }
 
-func Bid(client auction.AuctionServiceClient, ctx context.Context, amount int32) {
-	request := &auction.BidRequest{Amount: amount, ClientId: clientID}
+func Bid(client Auction.AuctionServiceClient, ctx context.Context, amount int32) {
+	request := &Auction.BidRequest{Amount: amount, ClientId: clientID}
 	response, err := client.Bid(ctx, request)
 	if response.Success {
 		fmt.Println("Bid was successful")
@@ -54,8 +53,8 @@ func Bid(client auction.AuctionServiceClient, ctx context.Context, amount int32)
 	}
 }
 
-func Result(client auction.AuctionServiceClient, ctx context.Context) {
-	request := &auction.ResultRequest{}
+func Result(client Auction.AuctionServiceClient, ctx context.Context) {
+	request := &Auction.ResultRequest{}
 	response, err := client.Result(ctx, request)
 	if response.Done {
 		fmt.Printf("The auction is finished. Bidder with id: %v won the auction, with bid: %v", response.BidderID, response.HighestBid)
@@ -67,18 +66,7 @@ func Result(client auction.AuctionServiceClient, ctx context.Context) {
 
 }
 
-func Logger(message string, logFileName string) {
-	f, err := os.OpenFile(logFileName, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatalf("error opening file: %v", err)
-	}
-	defer f.Close()
-
-	log.SetOutput(f)
-	log.Println(message)
-}
-
-func listenForInput(client auction.AuctionServiceClient, ctx context.Context) {
+func listenForInput(client Auction.AuctionServiceClient, ctx context.Context) {
 	for {
 		var input string
 		fmt.Scanln(&input)
