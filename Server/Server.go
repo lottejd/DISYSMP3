@@ -44,6 +44,7 @@ func main() {
 	go func() {
 		for {
 			fmt.Println("finding allServers")
+			server.findServers()
 			time.Sleep(time.Second * 5)
 			server.displayAllReplicas()
 			time.Sleep(time.Second * 5)
@@ -67,7 +68,9 @@ func main() {
 
 func (s *Server) displayAllReplicas() {
 	for _, server := range s.allServers {
-		fmt.Println(server.ToString())
+		if server.alive {
+			fmt.Println(server.ToString())
+		}
 	}
 }
 
@@ -89,13 +92,23 @@ func (s *Server) ChooseNewLeader(ctx context.Context, request *Replica.WantToLea
 // create a replicaServer
 func CreateReplica(conn *grpc.ClientConn) Server {
 	var primary bool
-	var port int32
+	var id, port int32
 	var allServers map[int32]Server
 
-	port = evalPort(conn)
-	primary = evalPrimary(conn)
-	allServers = evalServers(conn)
-	id := evalServerId(conn)
+	client := Replica.NewReplicaServiceClient(conn)
+	replicaInfo, err := client.CreateNewReplica(context.Background(), &Replica.EmptyRequest{})
+
+	if err != nil {
+		port = EvalPort(conn)
+		primary = evalPrimary(conn)
+		allServers = evalServers(conn, replicaInfo)
+		id = evalServerId(conn)
+	} else {
+		id = replicaInfo.GetServerId()
+		primary = false
+		port = replicaInfo.GetPort()
+		allServers = evalServers(conn, replicaInfo)
+	}
 
 	auction := AuctionType{0, -1, false} // fjern denne type auction køre gennemm log
 
@@ -103,6 +116,18 @@ func CreateReplica(conn *grpc.ClientConn) Server {
 }
 func (s *Server) ToString() string {
 	return fmt.Sprintf("Server id: %v, server port: %v, server status: %v,", s.id, s.port, s.alive)
+}
+
+func EvalPort(conn *grpc.ClientConn) int32 {
+	var port int32
+	if conn.GetState().String() != connectionNil {
+		client := Replica.NewReplicaServiceClient(conn)
+		response, _ := client.CreateNewReplica(context.Background(), &Replica.EmptyRequest{})
+		port = response.GetPort()
+	} else {
+		port = serverPort
+	}
+	return port
 }
 
 // ask leader for info to create a new replica
@@ -113,7 +138,10 @@ func (s *Server) CreateNewReplica(ctx context.Context, emptyRequest *Replica.Emp
 		highestId = Max(highestId, server.id)
 		highestPort = Max(highestPort, server.port)
 	}
-	response := Replica.ReplicaInfo{ServerId: (highestId + 1), Port: (highestPort + 1)}
+	replicas := s.ServerMapToReplicaInfoArray()
+	response := Replica.ReplicaInfo{ServerId: (highestId + 1), Port: (highestPort + 1), Replicas: replicas}
+
+	// add new server to map
 	temp := CreateTempReplica((highestId + 1), (highestPort + 1))
 	s.allServers[highestId] = *temp
 	fmt.Println(s.ToString())
@@ -142,11 +170,10 @@ func connect(port int32) (int32, *grpc.ClientConn) {
 		return 0, nil
 	}
 
-	ctx := context.Background()
 	client := Replica.NewReplicaServiceClient(conn)
 
 	request := Replica.GetStatusRequest{ServerId: int32(-1)}
-	id, err := client.CheckStatus(ctx, &request)
+	id, err := client.CheckStatus(context.Background(), &request)
 
 	return id.GetServerId(), conn
 }
@@ -177,18 +204,6 @@ func Listen(port int32, s *Server) {
 	}
 }
 
-func evalPort(conn *grpc.ClientConn) int32 {
-	var port int32
-	if conn.GetState().String() != connectionNil {
-		client := Replica.NewReplicaServiceClient(conn)
-		response, _ := client.CreateNewReplica(context.Background(), &Replica.EmptyRequest{})
-		port = response.GetPort()
-	} else {
-		port = serverPort
-	}
-	return port
-}
-
 func evalPrimary(conn *grpc.ClientConn) bool {
 	if conn.GetState().String() != connectionNil {
 		return false
@@ -212,7 +227,22 @@ func (s *Server) findServers() {
 	}
 }
 
-func evalServers(conn *grpc.ClientConn) map[int32]Server {
+func evalServers(conn *grpc.ClientConn, replicaInfo *Replica.ReplicaInfo) map[int32]Server {
 	serverMap := make(map[int32]Server)
+	if conn.GetState().String() != connectionNil {
+		fmt.Println("hello evalServers")
+		for _, replica := range replicaInfo.Replicas {
+			serverMap[replica.GetServerId()] = *CreateTempReplica(replica.GetServerId(), replica.GetPort())
+		}
+	}
 	return serverMap
+}
+
+func (s *Server) ServerMapToReplicaInfoArray() []*Replica.ReplicaInfo {
+	var servers []*Replica.ReplicaInfo
+	for _, Server := range s.allServers {
+		temp := Replica.ReplicaInfo{ServerId: Server.id, Port: Server.port}
+		servers = append(servers, &temp)
+	}
+	return servers
 }

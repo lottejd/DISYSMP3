@@ -41,10 +41,10 @@ message wantToLeadRequest{
 message statusResponse{
     int32 serverId = 1;
     repeated replicaInfo replicas = 2; 
-
 }
 
 message replicaInfo{
     int32 serverId = 1;
     int32 port = 2;
+    repeated replicaInfo replicas = 3;
 }

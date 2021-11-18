@@ -39,6 +39,7 @@ func (s *Server) UpdateReplicas(bid int32, bidId int32) string {
 	if s.primary {
 		ctx := context.Background()
 		request := Replica.Auction{Bid: bid, BidId: bidId}
+		
 		for _, server := range s.allServers {
 			if server.alive {
 				replicaClient, status := ConnectToClient(server.port)
