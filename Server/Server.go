@@ -26,7 +26,7 @@ type Server struct {
 	primary    bool
 	port       int
 	allServers map[int32]*Server
-	this       Auction
+	this       *Auction
 }
 
 type Auction struct {
@@ -60,7 +60,7 @@ func main() {
 	allServers = evalServers()
 	id := evalServerId()
 
-	s := Server{id: id, primary: primary, port: port, allServers: allServers, this: auction}
+	s := Server{id: id, primary: primary, port: port, allServers: allServers, this: &auction}
 
 	//setup listen on port
 	go Listen(s.port, &s)
@@ -109,7 +109,7 @@ func Listen(port int, s *Server) {
 			log.Fatalf("Failed to serve on")
 		}
 	}()
-	fmt.Println("hello im not blocked")
+	fmt.Println("hello I'm not blocked")
 
 	// start auction service
 	if s.primary {
@@ -134,7 +134,7 @@ func (s *Server) ChooseNewLeader(ctx context.Context, request *Replica.WantToLea
 
 func (s *Server) Bid(ctx context.Context, message *auction.BidRequest) (*auction.BidResponse, error) {
 	if message.Amount > s.this.highestBid {
-		s.updateBid(message.Amount)
+		s.updateBid(message.Amount, message.ClientId)
 		return &auction.BidResponse{Success: true}, nil
 	}
 	return &auction.BidResponse{Success: true}, nil
@@ -144,8 +144,9 @@ func (s *Server) Result(ctx context.Context, message *auction.ResultRequest) (*a
 	return &auction.ResultResponse{BidderID: s.this.highestBidder, HighestBid: s.this.highestBid, Done: s.this.done}, nil
 }
 
-func (s *Server) updateBid(bid int32) {
+func (s *Server) updateBid(bid int32, bidid int32) {
 	s.this.highestBid = bid
+	s.this.highestBidder = bidid
 	//reportToPrimary()
 }
 

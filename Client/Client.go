@@ -97,7 +97,12 @@ func listenForInput(client auction.AuctionServiceClient, ctx context.Context) {
 					Logger("bad bufio input", logFileName)
 				}
 				bid, err := strconv.Atoi(input)
-				Bid(client, ctx, int32(bid))
+				if err != nil {
+					log.Fatal(err)
+					fmt.Print("Error: Check logs")
+				} else {
+					Bid(client, ctx, int32(bid))
+				}
 				break
 
 			case "result":
