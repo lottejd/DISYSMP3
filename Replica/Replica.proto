@@ -4,16 +4,13 @@ package Replica;
 option go_package = "./Replica";
 
 service ReplicaService{
-    rpc CheckLeaderStatus (getStatusRequest) returns (leaderStatusResponse);
     rpc ChooseNewLeader (wantToLeadRequest) returns (statusResponse);
     rpc CheckStatus (getStatusRequest) returns (statusResponse);
     rpc CreateNewReplica (emptyRequest) returns (replicaInfo);
     rpc WriteToLog (auction) returns (ack);
 }
 
-message emptyRequest{
-
-}
+message emptyRequest{}
 
 message ack {
     string ack = 1;
@@ -29,18 +26,14 @@ message getStatusRequest {
     int32 serverId = 1;
 }
 
-message leaderStatusResponse {
-    bool alive = 1;
-    int32 serverId = 2;
-}
-
 message wantToLeadRequest{
     int32 serverId = 1;
 }
 
 message statusResponse{
     int32 serverId = 1;
-    repeated replicaInfo replicas = 2; 
+    bool primary = 2;
+    repeated replicaInfo replicas = 3; 
 }
 
 message replicaInfo{

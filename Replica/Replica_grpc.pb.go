@@ -18,7 +18,6 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ReplicaServiceClient interface {
-	CheckLeaderStatus(ctx context.Context, in *GetStatusRequest, opts ...grpc.CallOption) (*LeaderStatusResponse, error)
 	ChooseNewLeader(ctx context.Context, in *WantToLeadRequest, opts ...grpc.CallOption) (*StatusResponse, error)
 	CheckStatus(ctx context.Context, in *GetStatusRequest, opts ...grpc.CallOption) (*StatusResponse, error)
 	CreateNewReplica(ctx context.Context, in *EmptyRequest, opts ...grpc.CallOption) (*ReplicaInfo, error)
@@ -31,15 +30,6 @@ type replicaServiceClient struct {
 
 func NewReplicaServiceClient(cc grpc.ClientConnInterface) ReplicaServiceClient {
 	return &replicaServiceClient{cc}
-}
-
-func (c *replicaServiceClient) CheckLeaderStatus(ctx context.Context, in *GetStatusRequest, opts ...grpc.CallOption) (*LeaderStatusResponse, error) {
-	out := new(LeaderStatusResponse)
-	err := c.cc.Invoke(ctx, "/Replica.ReplicaService/CheckLeaderStatus", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 func (c *replicaServiceClient) ChooseNewLeader(ctx context.Context, in *WantToLeadRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
@@ -82,7 +72,6 @@ func (c *replicaServiceClient) WriteToLog(ctx context.Context, in *Auction, opts
 // All implementations must embed UnimplementedReplicaServiceServer
 // for forward compatibility
 type ReplicaServiceServer interface {
-	CheckLeaderStatus(context.Context, *GetStatusRequest) (*LeaderStatusResponse, error)
 	ChooseNewLeader(context.Context, *WantToLeadRequest) (*StatusResponse, error)
 	CheckStatus(context.Context, *GetStatusRequest) (*StatusResponse, error)
 	CreateNewReplica(context.Context, *EmptyRequest) (*ReplicaInfo, error)
@@ -94,9 +83,6 @@ type ReplicaServiceServer interface {
 type UnimplementedReplicaServiceServer struct {
 }
 
-func (UnimplementedReplicaServiceServer) CheckLeaderStatus(context.Context, *GetStatusRequest) (*LeaderStatusResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CheckLeaderStatus not implemented")
-}
 func (UnimplementedReplicaServiceServer) ChooseNewLeader(context.Context, *WantToLeadRequest) (*StatusResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ChooseNewLeader not implemented")
 }
@@ -120,24 +106,6 @@ type UnsafeReplicaServiceServer interface {
 
 func RegisterReplicaServiceServer(s grpc.ServiceRegistrar, srv ReplicaServiceServer) {
 	s.RegisterService(&ReplicaService_ServiceDesc, srv)
-}
-
-func _ReplicaService_CheckLeaderStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetStatusRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ReplicaServiceServer).CheckLeaderStatus(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/Replica.ReplicaService/CheckLeaderStatus",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ReplicaServiceServer).CheckLeaderStatus(ctx, req.(*GetStatusRequest))
-	}
-	return interceptor(ctx, in, info, handler)
 }
 
 func _ReplicaService_ChooseNewLeader_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -219,10 +187,6 @@ var ReplicaService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "Replica.ReplicaService",
 	HandlerType: (*ReplicaServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "CheckLeaderStatus",
-			Handler:    _ReplicaService_CheckLeaderStatus_Handler,
-		},
 		{
 			MethodName: "ChooseNewLeader",
 			Handler:    _ReplicaService_ChooseNewLeader_Handler,

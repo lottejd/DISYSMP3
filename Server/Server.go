@@ -13,16 +13,9 @@ import (
 	"google.golang.org/grpc"
 )
 
-const (
-	clientPort    = 8080
-	serverPort    = 5000
-	serverLogFile = "serverLog"
-	connectionNil = "TRANSIENT_FAILURE"
-)
-
 type Server struct {
-	Auction.UnimplementedAuctionServiceServer
 	Replica.UnimplementedReplicaServiceServer
+	Auction.UnimplementedAuctionServiceServer
 	id         int32
 	primary    bool
 	port       int32
@@ -34,19 +27,16 @@ type Server struct {
 func main() {
 
 	//init
-	_, primaryReplicaConn := connect(serverPort)
-
-	fmt.Println(primaryReplicaConn.GetState().String())
+	_, primaryReplicaConn := Connect(ServerPort)
 	server := CreateReplica(primaryReplicaConn)
+	ctx := context.Background()
 
 	//setup listen on port
 	go Listen(server.port, &server)
 	go func() {
 		for {
-			fmt.Println("finding allServers")
-			server.findServers()
-			time.Sleep(time.Second * 5)
-			server.displayAllReplicas()
+			fmt.Println("Display All Replicas")
+			server.DisplayAllReplicas()
 			time.Sleep(time.Second * 5)
 		}
 	}()
@@ -61,28 +51,33 @@ func main() {
 			time.Sleep(time.Minute * 5)
 			server.EndAuction()
 		}
-	}
-	fmt.Scanln()
+	} else {
+		for _, s := range server.allServers {
+			if server.id != s.id {
+				response, _ := s.CheckStatus(ctx, &Replica.GetStatusRequest{ServerId: server.id})
+				if response.Primary {
+					server.SetPrimary()
+				}
+			}
 
-}
-
-func (s *Server) displayAllReplicas() {
-	for _, server := range s.allServers {
-		if server.alive {
-			fmt.Println(server.ToString())
 		}
+		fmt.Scanln()
+
 	}
 }
 
 func (s *Server) WriteToLog(ctx context.Context, auction *Replica.Auction) (*Replica.Ack, error) {
 	msg := fmt.Sprintf("HighestBid: %v, placed by: %v", auction.Bid, auction.BidId)
-	Logger(msg, serverLogFile+strconv.Itoa(int(s.id)))
+	Logger(msg, ServerLogFile+strconv.Itoa(int(s.id)))
 	return &Replica.Ack{Ack: "ack"}, nil
 }
 
-func (s *Server) CheckLeaderStatus(ctx context.Context, request *Replica.GetStatusRequest) (*Replica.LeaderStatusResponse, error) {
+func (s *Server) CheckStatus(ctx context.Context, request *Replica.GetStatusRequest) (*Replica.StatusResponse, error) {
 	// implement
-	return nil, nil
+	replicas := s.ServerMapToReplicaInfoArray()
+	response := &Replica.StatusResponse{ServerId: s.id, Primary: s.primary, Replicas: replicas}
+
+	return response, nil
 }
 func (s *Server) ChooseNewLeader(ctx context.Context, request *Replica.WantToLeadRequest) (*Replica.StatusResponse, error) {
 	// implement
@@ -91,43 +86,27 @@ func (s *Server) ChooseNewLeader(ctx context.Context, request *Replica.WantToLea
 
 // create a replicaServer
 func CreateReplica(conn *grpc.ClientConn) Server {
-	var primary bool
-	var id, port int32
-	var allServers map[int32]Server
 
+	var id, port int32
 	client := Replica.NewReplicaServiceClient(conn)
 	replicaInfo, err := client.CreateNewReplica(context.Background(), &Replica.EmptyRequest{})
 
+	primary := EvalPrimary(conn)
+	allServers := EvalServers(conn, replicaInfo)
 	if err != nil {
-		port = EvalPort(conn)
-		primary = evalPrimary(conn)
-		allServers = evalServers(conn, replicaInfo)
-		id = evalServerId(conn)
+		fmt.Println(err.Error())
+		port = ServerPort
+		id = 0
 	} else {
 		id = replicaInfo.GetServerId()
-		primary = false
 		port = replicaInfo.GetPort()
-		allServers = evalServers(conn, replicaInfo)
 	}
 
 	auction := AuctionType{0, -1, false} // fjern denne type auction køre gennemm log
-
-	return Server{id: id, primary: primary, port: port, allServers: allServers, alive: true, this: &auction}
-}
-func (s *Server) ToString() string {
-	return fmt.Sprintf("Server id: %v, server port: %v, server status: %v,", s.id, s.port, s.alive)
-}
-
-func EvalPort(conn *grpc.ClientConn) int32 {
-	var port int32
-	if conn.GetState().String() != connectionNil {
-		client := Replica.NewReplicaServiceClient(conn)
-		response, _ := client.CreateNewReplica(context.Background(), &Replica.EmptyRequest{})
-		port = response.GetPort()
-	} else {
-		port = serverPort
-	}
-	return port
+	s := Server{id: id, primary: primary, port: port, allServers: allServers, alive: true, this: &auction}
+	s.AddReplica(&s)
+	s.DisplayAllReplicas()
+	return s
 }
 
 // ask leader for info to create a new replica
@@ -138,47 +117,20 @@ func (s *Server) CreateNewReplica(ctx context.Context, emptyRequest *Replica.Emp
 		highestId = Max(highestId, server.id)
 		highestPort = Max(highestPort, server.port)
 	}
+	highestId += 1
+	highestPort += 1
 	replicas := s.ServerMapToReplicaInfoArray()
-	response := Replica.ReplicaInfo{ServerId: (highestId + 1), Port: (highestPort + 1), Replicas: replicas}
+	response := Replica.ReplicaInfo{ServerId: (highestId), Port: (highestPort), Replicas: replicas}
 
 	// add new server to map
-	temp := CreateTempReplica((highestId + 1), (highestPort + 1))
+	temp := CreateProxyReplica((highestId), (highestPort))
 	s.allServers[highestId] = *temp
 	fmt.Println(s.ToString())
 	return &response, nil
 }
 
-func CreateTempReplica(id int32, port int32) *Server {
-	tempReplica := Server{id: id, primary: false, port: port, allServers: nil, alive: true, this: nil}
-	return &tempReplica
-}
-
-func evalServerId(conn *grpc.ClientConn) int32 {
-	if conn.GetState().String() != connectionNil {
-		client := Replica.NewReplicaServiceClient(conn)
-		response, _ := client.CreateNewReplica(context.Background(), &Replica.EmptyRequest{})
-		return response.GetServerId()
-	}
-	return 0
-}
-
-func connect(port int32) (int32, *grpc.ClientConn) {
-	// The first attempt will return an error witch will give the first replica ID 0
-	// After that it will connect to the port given as a parameter
-	conn, err := grpc.Dial(FormatAddress(port), grpc.WithInsecure())
-	if err != nil {
-		return 0, nil
-	}
-
-	client := Replica.NewReplicaServiceClient(conn)
-
-	request := Replica.GetStatusRequest{ServerId: int32(-1)}
-	id, err := client.CheckStatus(context.Background(), &request)
-
-	return id.GetServerId(), conn
-}
-
 func Listen(port int32, s *Server) {
+
 	// start peer to peer service
 	go func() {
 		lis, _ := net.Listen("tcp", FormatAddress(port))
@@ -189,12 +141,11 @@ func Listen(port int32, s *Server) {
 			log.Fatalf("Failed to serve on")
 		}
 	}()
-	fmt.Println("hello I'm not blocked")
 
 	// start auction service
 	if s.primary {
 		grpcServer := grpc.NewServer()
-		lis, _ := net.Listen("tcp", FormatAddress(clientPort))
+		lis, _ := net.Listen("tcp", FormatAddress(ClientPort))
 		Auction.RegisterAuctionServiceServer(grpcServer, s)
 
 		if err := grpcServer.Serve(lis); err != nil {
@@ -202,47 +153,4 @@ func Listen(port int32, s *Server) {
 		}
 
 	}
-}
-
-func evalPrimary(conn *grpc.ClientConn) bool {
-	if conn.GetState().String() != connectionNil {
-		return false
-	}
-	return true
-}
-
-func (s *Server) findServers() {
-	for id, server := range s.allServers {
-		if server.id == s.id {
-			continue
-		}
-		serverId, conn := connect(serverPort)
-		if conn.GetState().String() != connectionNil {
-			if serverId == id {
-				server.alive = true
-			}
-			continue
-		}
-		server.alive = false
-	}
-}
-
-func evalServers(conn *grpc.ClientConn, replicaInfo *Replica.ReplicaInfo) map[int32]Server {
-	serverMap := make(map[int32]Server)
-	if conn.GetState().String() != connectionNil {
-		fmt.Println("hello evalServers")
-		for _, replica := range replicaInfo.Replicas {
-			serverMap[replica.GetServerId()] = *CreateTempReplica(replica.GetServerId(), replica.GetPort())
-		}
-	}
-	return serverMap
-}
-
-func (s *Server) ServerMapToReplicaInfoArray() []*Replica.ReplicaInfo {
-	var servers []*Replica.ReplicaInfo
-	for _, Server := range s.allServers {
-		temp := Replica.ReplicaInfo{ServerId: Server.id, Port: Server.port}
-		servers = append(servers, &temp)
-	}
-	return servers
 }

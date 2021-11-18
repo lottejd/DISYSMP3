@@ -39,10 +39,10 @@ func (s *Server) UpdateReplicas(bid int32, bidId int32) string {
 	if s.primary {
 		ctx := context.Background()
 		request := Replica.Auction{Bid: bid, BidId: bidId}
-		
+
 		for _, server := range s.allServers {
 			if server.alive {
-				replicaClient, status := ConnectToClient(server.port)
+				replicaClient, status := ConnectToReplicaClient(server.port)
 				if status == "failed" {
 					server.alive = false
 				} else {
@@ -61,12 +61,12 @@ func (s *Server) UpdateReplicas(bid int32, bidId int32) string {
 	return "failed"
 }
 
-func ConnectToClient(port int32) (Replica.ReplicaServiceClient, string) {
+func ConnectToReplicaClient(port int32) (Replica.ReplicaServiceClient, string) {
 	var status string
 	var client Replica.ReplicaServiceClient
 	status = "failed"
 	for i := 0; i < 3; i++ {
-		_, conn := connect(port)
+		_, conn := Connect(port)
 		if conn == nil {
 			time.Sleep(time.Millisecond * 250)
 			continue
