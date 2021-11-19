@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"strconv"
 
@@ -66,9 +65,7 @@ func Listen(port int32, s *Server) {
 
 		grpcServer := grpc.NewServer()
 		Replica.RegisterReplicaServiceServer(grpcServer, s)
-		if err := grpcServer.Serve(lis); err != nil {
-			log.Fatalf("Failed to serve on")
-		}
+		grpcServer.Serve(lis)
 	}()
 
 	// start auction service
@@ -78,9 +75,6 @@ func Listen(port int32, s *Server) {
 		defer lis.Close()
 
 		Auction.RegisterAuctionServiceServer(grpcServer, s)
-		if err := grpcServer.Serve(lis); err != nil {
-			log.Fatalf("Failed to serve gRPC server over port %v  %v", port, err)
-		}
-
+		grpcServer.Serve(lis)
 	}
 }

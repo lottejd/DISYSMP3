@@ -88,9 +88,7 @@ func (s *Server) SetPrimary() {
 func (s *Server) DisplayAllReplicas() {
 	fmt.Println("Display All Replicas")
 	for _, server := range s.allServers {
-		if server.alive {
-			fmt.Println(server.ToString())
-		}
+		fmt.Println(server.ToString())
 	}
 }
 

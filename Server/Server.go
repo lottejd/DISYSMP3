@@ -78,14 +78,14 @@ func UpdatePrimaryReplica(s *Server) {
 	s.KillLeader()
 	s.SetPrimary()
 	s.arbiter.Unlock()
+	time.Sleep(time.Second * 5)
 	go Listen(ServerPort, s)
 }
 
 func (s *Server) PrimaryLoop() {
-	fmt.Println("hello loooop")
 	for {
 		time.Sleep(time.Second * 2)
-		fmt.Println(s.ToString())
+		fmt.Println(s.id)
 	}
 }
 
@@ -132,8 +132,7 @@ func (s *Server) StartElection() string {
 	ctx, cancelCtx := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancelCtx()
 	for _, server := range s.allServers {
-		fmt.Println("server range loop")
-		if s.id > server.id {
+		if s.id < server.id {
 			client, ack := ConnectToReplicaClient(server.port)
 			fmt.Print(ack)
 			response, err := client.Election(ctx, &msg)
@@ -153,9 +152,11 @@ func (s *Server) Election(ctx context.Context, msg *Replica.ElectionMessage) (*R
 	// implement
 	electionId := msg.GetServerId()
 	if strings.EqualFold("Winner", msg.GetMsg()) && electionId > s.id {
+		s.arbiter.Lock()
 		temp := s.allServers[electionId]
 		temp.SetPrimary()
 		s.allServers[electionId] = temp
+		s.arbiter.Lock()
 	}
 	response := Replica.Answer{ServerId: s.id, Alive: s.alive}
 
