@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
-	"net"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/lottejd/DISYSMP3/Auction"
@@ -20,15 +20,16 @@ type Server struct {
 	port       int32
 	allServers map[int32]Server
 	alive      bool
+	arbiter    sync.Mutex
 	this       *AuctionType
 }
 
 func main() {
 
 	//init
+	leaderIsDead := make(chan bool)
 	_, primaryReplicaConn := Connect(ServerPort)
 	server := CreateReplica(primaryReplicaConn)
-	ctx := context.Background()
 
 	//setup listen on port
 	go Listen(server.port, &server)
@@ -37,13 +38,11 @@ func main() {
 			go server.DisplayAllReplicas()
 			time.Sleep(time.Second * 5)
 			go server.FindServers()
-
 		}
 	}()
 
 	// start the service / server on the specific port
 	// skal rykkes ud i en go routine, i tilfæde primary dør bliver det her ikke kørt igen
-	fmt.Println(server.primary)
 	if server.primary {
 		server.allServers[server.id] = server
 		for {
@@ -52,31 +51,134 @@ func main() {
 			server.EndAuction()
 		}
 	} else {
-		for _, s := range server.allServers {
-			if server.id != s.id {
-				client, _ := ConnectToReplicaClient(s.port)
-				response, _ := client.CheckStatus(ctx, &Replica.GetStatusRequest{ServerId: server.id})
-				if response.GetPrimary() {
-					temp := s
-					temp.SetPrimary()
-					server.allServers[s.id] = temp
+		go server.ReplicaLoop(leaderIsDead)
+
+		for {
+			temp := <-leaderIsDead
+			if temp {
+				fmt.Println("leader is dead find a new one")
+				server.KillLeader()
+				outcome := server.StartElection()
+				fmt.Println(outcome)
+				if outcome == "Winner" {
+					UpdatePrimaryReplica(&server)
+					server.PrimaryLoop()
+					break
 				}
 			}
-
 		}
+
 	}
+
 	fmt.Scanln()
 }
 
+func UpdatePrimaryReplica(s *Server) {
+	s.arbiter.Lock()
+	s.KillLeader()
+	s.SetPrimary()
+	s.arbiter.Unlock()
+	go Listen(ServerPort, s)
+}
+
+func (s *Server) PrimaryLoop() {
+	fmt.Println("hello loooop")
+	for {
+		time.Sleep(time.Second * 2)
+		fmt.Println(s.ToString())
+	}
+}
+
+func (s *Server) ReplicaLoop(leaderStatus chan bool) {
+	for {
+		if s.primary {
+			UpdatePrimaryReplica(s)
+			break
+		}
+		leaderIsDead := true
+		ctx := context.Background()
+		for _, server := range s.allServers {
+			if s.id != server.id && server.alive {
+				client, _ := ConnectToReplicaClient(server.port)
+				response, _ := client.CheckStatus(ctx, &Replica.GetStatusRequest{ServerId: s.id})
+				if response.GetPrimary() {
+					leaderIsDead = false
+					temp := server
+					temp.SetPrimary()
+					s.allServers[server.id] = temp
+				}
+			}
+		}
+		time.Sleep(time.Millisecond * 500)
+		if leaderIsDead {
+			leaderStatus <- leaderIsDead
+		}
+		time.Sleep(time.Second * 2)
+	}
+}
+
 func (s *Server) CheckStatus(ctx context.Context, request *Replica.GetStatusRequest) (*Replica.StatusResponse, error) {
-	// implement
 	replicas := s.ServerMapToReplicaInfoArray()
 	response := Replica.StatusResponse{ServerId: s.id, Primary: s.primary, Replicas: replicas}
 	return &response, nil
 }
-func (s *Server) ChooseNewLeader(ctx context.Context, request *Replica.WantToLeadRequest) (*Replica.StatusResponse, error) {
+func (s *Server) ChooseNewLeader(ctx context.Context, request *Replica.WantToLeadRequest) (*Replica.VoteResponse, error) {
 	// implement
 	return nil, nil
+}
+
+func (s *Server) StartElection() string {
+	msg := Replica.ElectionMessage{ServerId: s.id, Msg: "Election"}
+	ctx, cancelCtx := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancelCtx()
+	for _, server := range s.allServers {
+		fmt.Println("server range loop")
+		if s.id > server.id {
+			client, ack := ConnectToReplicaClient(server.port)
+			fmt.Print(ack)
+			response, err := client.Election(ctx, &msg)
+			if err != nil {
+				fmt.Println(err.Error())
+				continue
+			}
+			if response.Alive {
+				return "Lost"
+			}
+		}
+	}
+	return "Winner"
+}
+
+func (s *Server) Election(ctx context.Context, msg *Replica.ElectionMessage) (*Replica.Answer, error) {
+	// implement
+	electionId := msg.GetServerId()
+	if strings.EqualFold("Winner", msg.GetMsg()) && electionId > s.id {
+		temp := s.allServers[electionId]
+		temp.SetPrimary()
+		s.allServers[electionId] = temp
+	}
+	response := Replica.Answer{ServerId: s.id, Alive: s.alive}
+
+	if electionId < s.id {
+		outcome := s.StartElection()
+		if strings.EqualFold(outcome, "Winner") {
+			msg := Replica.ElectionMessage{ServerId: s.id, Msg: "Winner"}
+			ctx, cancelCtx := context.WithTimeout(context.Background(), time.Second*10)
+			defer cancelCtx()
+			for _, server := range s.allServers {
+				client, _ := ConnectToReplicaClient(server.port)
+				response, _ := client.Election(ctx, &msg)
+				if response.GetServerId() < s.id {
+					break
+				}
+			}
+			s.SetPrimary()
+		}
+	}
+
+	// s is small guy just wait no response :-(
+	fmt.Println(response.GetServerId())
+	return &response, nil
 }
 
 // create a replicaServer
@@ -98,9 +200,8 @@ func CreateReplica(conn *grpc.ClientConn) Server {
 	}
 
 	auction := AuctionType{0, -1, false} // fjern denne type auction køre gennemm log
-	s := Server{id: id, primary: primary, port: port, allServers: allServers, alive: true, this: &auction}
+	s := Server{id: id, primary: primary, port: port, allServers: allServers, alive: true, arbiter: sync.Mutex{}, this: &auction}
 	s.AddReplica(&s)
-	s.DisplayAllReplicas()
 	return s
 }
 
@@ -121,29 +222,4 @@ func (s *Server) CreateNewReplica(ctx context.Context, emptyRequest *Replica.Emp
 	temp := CreateProxyReplica((highestId), (highestPort))
 	s.allServers[highestId] = *temp
 	return &response, nil
-}
-
-func Listen(port int32, s *Server) {
-	// start peer to peer service
-	go func() {
-		lis, _ := net.Listen("tcp", FormatAddress(port))
-
-		grpcServer := grpc.NewServer()
-		Replica.RegisterReplicaServiceServer(grpcServer, s)
-		if err := grpcServer.Serve(lis); err != nil {
-			log.Fatalf("Failed to serve on")
-		}
-	}()
-
-	// start auction service
-	if s.primary {
-		grpcServer := grpc.NewServer()
-		lis, _ := net.Listen("tcp", FormatAddress(ClientPort))
-		Auction.RegisterAuctionServiceServer(grpcServer, s)
-
-		if err := grpcServer.Serve(lis); err != nil {
-			log.Fatalf("Failed to serve gRPC server over port %v  %v", port, err)
-		}
-
-	}
 }

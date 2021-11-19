@@ -47,7 +47,7 @@ func (s *Server) UpdateReplicas(bid int32, bidId int32) string {
 					server.alive = false
 				} else {
 					ack, _ := replicaClient.WriteToLog(ctx, &request)
-					if ack.GetAck() == "ack" {
+					if ack.GetAck() == "succes" {
 						succes = true
 					}
 
@@ -72,7 +72,7 @@ func ConnectToReplicaClient(port int32) (Replica.ReplicaServiceClient, string) {
 			continue
 		}
 		client = Replica.NewReplicaServiceClient(conn)
-		status = "ack"
+		status = "succes"
 		break
 	}
 

@@ -56,6 +56,13 @@ func Max(this int32, that int32) int32 {
 	return this
 }
 
+func Min(this int32, that int32) int32 {
+	if this < that {
+		return this
+	}
+	return that
+}
+
 func FormatAddress(port int32) string {
 	address := fmt.Sprintf("localhost:%v", port)
 	return address
@@ -87,26 +94,38 @@ func (s *Server) DisplayAllReplicas() {
 	}
 }
 
+func (s *Server) KillLeader() {
+	for _, server := range s.allServers {
+		if server.primary {
+			temp := server
+			temp.alive = false
+			temp.primary = false
+			s.allServers[server.id] = temp
+			break
+		}
+	}
+}
+
 // deprecated
 
-func EvalServerId(conn *grpc.ClientConn) int32 {
+// func EvalServerId(conn *grpc.ClientConn) int32 {
 
-	if IsConnectable(conn) {
-		client := Replica.NewReplicaServiceClient(conn)
-		response, _ := client.CreateNewReplica(context.Background(), &Replica.EmptyRequest{})
-		return response.GetServerId()
-	}
-	return 0
-}
+// 	if IsConnectable(conn) {
+// 		client := Replica.NewReplicaServiceClient(conn)
+// 		response, _ := client.CreateNewReplica(context.Background(), &Replica.EmptyRequest{})
+// 		return response.GetServerId()
+// 	}
+// 	return 0
+// }
 
-func EvalPort(conn *grpc.ClientConn) int32 {
-	var port int32
-	if IsConnectable(conn) {
-		client := Replica.NewReplicaServiceClient(conn)
-		response, _ := client.CreateNewReplica(context.Background(), &Replica.EmptyRequest{})
-		port = response.GetPort()
-	} else {
-		port = ServerPort
-	}
-	return port
-}
+// func EvalPort(conn *grpc.ClientConn) int32 {
+// 	var port int32
+// 	if IsConnectable(conn) {
+// 		client := Replica.NewReplicaServiceClient(conn)
+// 		response, _ := client.CreateNewReplica(context.Background(), &Replica.EmptyRequest{})
+// 		port = response.GetPort()
+// 	} else {
+// 		port = ServerPort
+// 	}
+// 	return port
+// }

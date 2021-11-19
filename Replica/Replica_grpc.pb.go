@@ -18,10 +18,11 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ReplicaServiceClient interface {
-	ChooseNewLeader(ctx context.Context, in *WantToLeadRequest, opts ...grpc.CallOption) (*StatusResponse, error)
+	ChooseNewLeader(ctx context.Context, in *WantToLeadRequest, opts ...grpc.CallOption) (*VoteResponse, error)
 	CheckStatus(ctx context.Context, in *GetStatusRequest, opts ...grpc.CallOption) (*StatusResponse, error)
 	CreateNewReplica(ctx context.Context, in *EmptyRequest, opts ...grpc.CallOption) (*ReplicaInfo, error)
 	WriteToLog(ctx context.Context, in *Auction, opts ...grpc.CallOption) (*Ack, error)
+	Election(ctx context.Context, in *ElectionMessage, opts ...grpc.CallOption) (*Answer, error)
 }
 
 type replicaServiceClient struct {
@@ -32,8 +33,8 @@ func NewReplicaServiceClient(cc grpc.ClientConnInterface) ReplicaServiceClient {
 	return &replicaServiceClient{cc}
 }
 
-func (c *replicaServiceClient) ChooseNewLeader(ctx context.Context, in *WantToLeadRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
-	out := new(StatusResponse)
+func (c *replicaServiceClient) ChooseNewLeader(ctx context.Context, in *WantToLeadRequest, opts ...grpc.CallOption) (*VoteResponse, error) {
+	out := new(VoteResponse)
 	err := c.cc.Invoke(ctx, "/Replica.ReplicaService/ChooseNewLeader", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -68,14 +69,24 @@ func (c *replicaServiceClient) WriteToLog(ctx context.Context, in *Auction, opts
 	return out, nil
 }
 
+func (c *replicaServiceClient) Election(ctx context.Context, in *ElectionMessage, opts ...grpc.CallOption) (*Answer, error) {
+	out := new(Answer)
+	err := c.cc.Invoke(ctx, "/Replica.ReplicaService/Election", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ReplicaServiceServer is the server API for ReplicaService service.
 // All implementations must embed UnimplementedReplicaServiceServer
 // for forward compatibility
 type ReplicaServiceServer interface {
-	ChooseNewLeader(context.Context, *WantToLeadRequest) (*StatusResponse, error)
+	ChooseNewLeader(context.Context, *WantToLeadRequest) (*VoteResponse, error)
 	CheckStatus(context.Context, *GetStatusRequest) (*StatusResponse, error)
 	CreateNewReplica(context.Context, *EmptyRequest) (*ReplicaInfo, error)
 	WriteToLog(context.Context, *Auction) (*Ack, error)
+	Election(context.Context, *ElectionMessage) (*Answer, error)
 	mustEmbedUnimplementedReplicaServiceServer()
 }
 
@@ -83,7 +94,7 @@ type ReplicaServiceServer interface {
 type UnimplementedReplicaServiceServer struct {
 }
 
-func (UnimplementedReplicaServiceServer) ChooseNewLeader(context.Context, *WantToLeadRequest) (*StatusResponse, error) {
+func (UnimplementedReplicaServiceServer) ChooseNewLeader(context.Context, *WantToLeadRequest) (*VoteResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ChooseNewLeader not implemented")
 }
 func (UnimplementedReplicaServiceServer) CheckStatus(context.Context, *GetStatusRequest) (*StatusResponse, error) {
@@ -94,6 +105,9 @@ func (UnimplementedReplicaServiceServer) CreateNewReplica(context.Context, *Empt
 }
 func (UnimplementedReplicaServiceServer) WriteToLog(context.Context, *Auction) (*Ack, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method WriteToLog not implemented")
+}
+func (UnimplementedReplicaServiceServer) Election(context.Context, *ElectionMessage) (*Answer, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Election not implemented")
 }
 func (UnimplementedReplicaServiceServer) mustEmbedUnimplementedReplicaServiceServer() {}
 
@@ -180,6 +194,24 @@ func _ReplicaService_WriteToLog_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ReplicaService_Election_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ElectionMessage)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ReplicaServiceServer).Election(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/Replica.ReplicaService/Election",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ReplicaServiceServer).Election(ctx, req.(*ElectionMessage))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ReplicaService_ServiceDesc is the grpc.ServiceDesc for ReplicaService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -202,6 +234,10 @@ var ReplicaService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WriteToLog",
 			Handler:    _ReplicaService_WriteToLog_Handler,
+		},
+		{
+			MethodName: "Election",
+			Handler:    _ReplicaService_Election_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

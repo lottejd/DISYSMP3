@@ -3,8 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
+	"net"
 	"strconv"
 
+	"github.com/lottejd/DISYSMP3/Auction"
 	"github.com/lottejd/DISYSMP3/Replica"
 	"google.golang.org/grpc"
 )
@@ -52,5 +55,32 @@ func (s *Server) FindServers() {
 			replica := CreateProxyReplica(serverId, int32(ServerPort+i))
 			s.AddReplica(replica)
 		}
+	}
+}
+
+func Listen(port int32, s *Server) {
+	// start peer to peer service
+	go func() {
+		lis, _ := net.Listen("tcp", FormatAddress(port))
+		defer lis.Close()
+
+		grpcServer := grpc.NewServer()
+		Replica.RegisterReplicaServiceServer(grpcServer, s)
+		if err := grpcServer.Serve(lis); err != nil {
+			log.Fatalf("Failed to serve on")
+		}
+	}()
+
+	// start auction service
+	if s.primary {
+		grpcServer := grpc.NewServer()
+		lis, _ := net.Listen("tcp", FormatAddress(ClientPort))
+		defer lis.Close()
+
+		Auction.RegisterAuctionServiceServer(grpcServer, s)
+		if err := grpcServer.Serve(lis); err != nil {
+			log.Fatalf("Failed to serve gRPC server over port %v  %v", port, err)
+		}
+
 	}
 }
