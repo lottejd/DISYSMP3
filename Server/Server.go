@@ -61,8 +61,8 @@ func main() {
 				outcome := server.StartElection()
 				fmt.Println(outcome)
 				if outcome == "Winner" {
-					NewPrimaryReplica(&server)
-					server.PrimaryReplicaLoop()
+					NewPrimaryReplica(&server)  // remove this from here since its being run in PrimaryReplicaLoop
+					server.PrimaryReplicaLoop() // run as go rutine?
 					break
 				}
 			}
