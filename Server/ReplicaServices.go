@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"strconv"
 
@@ -21,10 +22,12 @@ func IsConnectable(conn *grpc.ClientConn) bool {
 	return conn.GetState().String() != ConnectionNil
 }
 
+//  this is a little iffy until we ensure new replicas take over port 5000
 func EvalPrimary(conn *grpc.ClientConn) bool {
 	return !IsConnectable(conn)
 }
 
+// maybe this is redundant since FindServersAndAddToMap() does this anyways
 func EvalServers(conn *grpc.ClientConn, replicaInfo *Replica.ReplicaInfo) map[int32]Server {
 	serverMap := make(map[int32]Server)
 	if IsConnectable(conn) {
@@ -35,6 +38,7 @@ func EvalServers(conn *grpc.ClientConn, replicaInfo *Replica.ReplicaInfo) map[in
 	return serverMap
 }
 
+// maybe this is redundant since FindServersAndAddToMap() does this anyways
 func (s *Server) ServerMapToReplicaInfoArray() []*Replica.ReplicaInfo {
 	var servers []*Replica.ReplicaInfo
 	for _, Server := range s.allServers {
@@ -44,7 +48,7 @@ func (s *Server) ServerMapToReplicaInfoArray() []*Replica.ReplicaInfo {
 	return servers
 }
 
-func (s *Server) FindServers() {
+func (s *Server) FindServersAndAddToMap() {
 	for i := 0; i < 10; i++ {
 		if int(s.id) == i {
 			continue
@@ -52,20 +56,23 @@ func (s *Server) FindServers() {
 		serverId, conn := Connect(int32(ServerPort + i))
 		if IsConnectable(conn) && s.allServers[int32(serverId)].port == 0 {
 			replica := CreateProxyReplica(serverId, int32(ServerPort+i))
-			s.AddReplica(replica)
+			s.AddReplicaToMap(replica)
 		}
 	}
 }
 
+// split this method into StartReplicaService and StartAuctionService
+// and add retrys for StartReplicaService
 func Listen(port int32, s *Server) {
 	// start peer to peer service
 	go func() {
 		lis, _ := net.Listen("tcp", FormatAddress(port))
-		defer lis.Close()
 
 		grpcServer := grpc.NewServer()
 		Replica.RegisterReplicaServiceServer(grpcServer, s)
-		grpcServer.Serve(lis)
+		if err := grpcServer.Serve(lis); err != nil {
+			log.Fatalf("Failed to serve on")
+		}
 	}()
 
 	// start auction service
@@ -75,6 +82,9 @@ func Listen(port int32, s *Server) {
 		defer lis.Close()
 
 		Auction.RegisterAuctionServiceServer(grpcServer, s)
-		grpcServer.Serve(lis)
+		if err := grpcServer.Serve(lis); err != nil {
+			log.Fatalf("Failed to serve gRPC server over port %v  %v", port, err)
+		}
+
 	}
 }

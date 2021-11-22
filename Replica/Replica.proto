@@ -4,7 +4,7 @@ package Replica;
 option go_package = "./Replica";
 
 service ReplicaService{
-    rpc ChooseNewLeader (wantToLeadRequest) returns (voteResponse);
+    rpc ChooseNewLeader (wantToLeadRequest) returns (voteResponse); // remove this method
     rpc CheckStatus (getStatusRequest) returns (statusResponse);
     rpc CreateNewReplica (emptyRequest) returns (replicaInfo);
     rpc WriteToLog (auction) returns (ack);
@@ -18,15 +18,15 @@ message ElectionMessage{
 
 message Answer{
     int32 serverId = 1;
-    bool alive = 2;
+    bool alive = 2; // maybe remove since getting an Answer implies alive
 }
 
-message wantToLeadRequest{
+message wantToLeadRequest{ // remove
     int32 serverId = 1;
     int32 term = 2;
 }
 
-message voteResponse{
+message voteResponse{ // remove 
     int32 serverdId = 1;
     int32 term = 2;
 }

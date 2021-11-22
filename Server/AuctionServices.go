@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/lottejd/DISYSMP3/Auction"
@@ -23,7 +24,7 @@ func (s *Server) Result(ctx context.Context, message *Auction.ResultRequest) (*A
 func (s *Server) UpdateBid(bid int32, bidId int32) {
 	s.this.highestBid = bid
 	s.this.highestBidder = bidId
-	s.UpdateReplicas(bid, bidId)
+	s.UpdateAllReplicaLogs(bid, bidId)
 }
 
 func (s *Server) StartAuction() {
@@ -34,8 +35,8 @@ func (s *Server) EndAuction() {
 	s.this.done = true
 }
 
-func (s *Server) UpdateReplicas(bid int32, bidId int32) string {
-	var succes bool // fjern efter testing
+func (s *Server) UpdateAllReplicaLogs(bid int32, bidId int32) string {
+	var succes bool
 	if s.primary {
 		ctx := context.Background()
 		request := Replica.Auction{Bid: bid, BidId: bidId}
@@ -43,11 +44,11 @@ func (s *Server) UpdateReplicas(bid int32, bidId int32) string {
 		for _, server := range s.allServers {
 			if server.alive {
 				replicaClient, status := ConnectToReplicaClient(server.port)
-				if status == "failed" {
+				if strings.EqualFold(status, "failed") {
 					server.alive = false
 				} else {
 					ack, _ := replicaClient.WriteToLog(ctx, &request)
-					if ack.GetAck() == "succes" {
+					if strings.EqualFold(ack.GetAck(), "succes") {
 						succes = true
 					}
 
@@ -61,6 +62,7 @@ func (s *Server) UpdateReplicas(bid int32, bidId int32) string {
 	return "failed"
 }
 
+// connect to a replica with at max 3 retries
 func ConnectToReplicaClient(port int32) (Replica.ReplicaServiceClient, string) {
 	var status string
 	var client Replica.ReplicaServiceClient
