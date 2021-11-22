@@ -86,15 +86,14 @@ func (s *Server) DisplayAllReplicas() {
 	}
 }
 
-// Mark leader as dead in the replica server map
+// Mark primary as dead in the replica server map
 func (s *Server) KillLeaderLocally() {
 	for _, server := range s.allServers {
-		if server.primary {
+		if server.primary && server.id != s.id {
 			temp := server
 			temp.alive = false
 			temp.primary = false
 			s.allServers[server.id] = temp
-			break
 		}
 	}
 }
