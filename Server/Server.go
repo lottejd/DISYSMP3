@@ -27,42 +27,42 @@ type Server struct {
 func main() {
 
 	//init
-	leaderIsDead := make(chan bool)
+	isPrimaryDead := make(chan bool)
 	_, primaryReplicaConn := Connect(ServerPort)
 	server := CreateReplica(primaryReplicaConn)
 
 	//setup listen on port
 	go Listen(server.port, &server)
+
+	// find and display all replicas
 	go func() {
 		for {
 			go server.DisplayAllReplicas()
 			time.Sleep(time.Second * 5)
-			go server.FindServers()
+			go server.FindServersAndAddToMap()
 		}
 	}()
 
+	// Is it possible to use defer to restart the server as primary?
+	// defer server.PrimaryReplicaLoop()
+
 	// start the service / server on the specific port
-	// skal rykkes ud i en go routine, i tilfæde primary dør bliver det her ikke kørt igen
 	if server.primary {
 		server.allServers[server.id] = server
-		for {
-			server.StartAuction()
-			time.Sleep(time.Minute * 5)
-			server.EndAuction()
-		}
+		go server.PrimaryReplicaLoop()
 	} else {
-		go server.ReplicaLoop(leaderIsDead)
+		go server.ReplicaLoop(isPrimaryDead)
 
 		for {
-			temp := <-leaderIsDead
+			temp := <-isPrimaryDead
 			if temp {
 				fmt.Println("leader is dead find a new one")
-				server.KillLeader()
+				server.KillLeaderLocally()
 				outcome := server.StartElection()
 				fmt.Println(outcome)
 				if outcome == "Winner" {
-					UpdatePrimaryReplica(&server)
-					server.PrimaryLoop()
+					NewPrimaryReplica(&server)
+					server.PrimaryReplicaLoop()
 					break
 				}
 			}
@@ -73,30 +73,37 @@ func main() {
 	fmt.Scanln()
 }
 
-func UpdatePrimaryReplica(s *Server) {
+func NewPrimaryReplica(s *Server) {
 	s.arbiter.Lock()
-	s.KillLeader()
+	s.KillLeaderLocally()
 	s.SetPrimary()
 	s.arbiter.Unlock()
 	time.Sleep(time.Second * 5)
 	go Listen(ServerPort, s)
 }
 
-func (s *Server) PrimaryLoop() {
+func (s *Server) PrimaryReplicaLoop() {
+	NewPrimaryReplica(s)
+	fmt.Println(s.id)
+	time.Sleep(time.Second * 2)
+	// tilføj logic hvis der allerede er en auction forsæt på den
+	// hent sidste bud fra log
 	for {
-		time.Sleep(time.Second * 2)
-		fmt.Println(s.id)
+		s.StartAuction()
+		time.Sleep(time.Minute * 5)
+		s.EndAuction()
 	}
 }
 
 func (s *Server) ReplicaLoop(leaderStatus chan bool) {
 	for {
 		if s.primary {
-			UpdatePrimaryReplica(s)
 			break
 		}
+
 		leaderIsDead := true
 		ctx := context.Background()
+		// Check if leader is dead
 		for _, server := range s.allServers {
 			if s.id != server.id && server.alive {
 				client, _ := ConnectToReplicaClient(server.port)
@@ -109,24 +116,29 @@ func (s *Server) ReplicaLoop(leaderStatus chan bool) {
 				}
 			}
 		}
+
 		time.Sleep(time.Millisecond * 500)
 		if leaderIsDead {
-			leaderStatus <- leaderIsDead
+			leaderStatus <- leaderIsDead // use a channel to break the loop in main
 		}
 		time.Sleep(time.Second * 2)
 	}
 }
 
+// gRPC service sends replicas own status
 func (s *Server) CheckStatus(ctx context.Context, request *Replica.GetStatusRequest) (*Replica.StatusResponse, error) {
 	replicas := s.ServerMapToReplicaInfoArray()
 	response := Replica.StatusResponse{ServerId: s.id, Primary: s.primary, Replicas: replicas}
 	return &response, nil
 }
+
+// remove this method
 func (s *Server) ChooseNewLeader(ctx context.Context, request *Replica.WantToLeadRequest) (*Replica.VoteResponse, error) {
 	// implement
 	return nil, nil
 }
 
+// begin Election bully style
 func (s *Server) StartElection() string {
 	msg := Replica.ElectionMessage{ServerId: s.id, Msg: "Election"}
 	ctx, cancelCtx := context.WithTimeout(context.Background(), time.Second*10)
@@ -150,6 +162,7 @@ func (s *Server) StartElection() string {
 
 func (s *Server) Election(ctx context.Context, msg *Replica.ElectionMessage) (*Replica.Answer, error) {
 	// implement
+	// Election invoked by another replica
 	electionId := msg.GetServerId()
 	if strings.EqualFold("Winner", msg.GetMsg()) && electionId > s.id {
 		s.arbiter.Lock()
@@ -177,7 +190,7 @@ func (s *Server) Election(ctx context.Context, msg *Replica.ElectionMessage) (*R
 		}
 	}
 
-	// s is small guy just wait no response :-(
+	// if s is small guy just wait no response :-(
 	fmt.Println(response.GetServerId())
 	return &response, nil
 }
@@ -202,7 +215,7 @@ func CreateReplica(conn *grpc.ClientConn) Server {
 
 	auction := AuctionType{0, -1, false} // fjern denne type auction køre gennemm log
 	s := Server{id: id, primary: primary, port: port, allServers: allServers, alive: true, arbiter: sync.Mutex{}, this: &auction}
-	s.AddReplica(&s)
+	s.AddReplicaToMap(&s)
 	return s
 }
 

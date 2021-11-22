@@ -14,7 +14,7 @@ const (
 	ClientPort    = 8080
 	ServerPort    = 5000
 	ServerLogFile = "serverLog"
-	ConnectionNil = "TRANSIENT_FAILURE"
+	ConnectionNil = "TRANSIENT_FAILURE" // instead of nil when trying to connect to a port without a ReplicaService registered
 )
 
 type AuctionType struct {
@@ -23,6 +23,7 @@ type AuctionType struct {
 	done          bool
 }
 
+// move this into ConnectToReplicaClient or refactor
 func Connect(port int32) (int32, *grpc.ClientConn) {
 	// The first attempt will return an error witch will give the first replica ID 0
 	// After that it will connect to the port given as a parameter
@@ -56,13 +57,6 @@ func Max(this int32, that int32) int32 {
 	return this
 }
 
-func Min(this int32, that int32) int32 {
-	if this < that {
-		return this
-	}
-	return that
-}
-
 func FormatAddress(port int32) string {
 	address := fmt.Sprintf("localhost:%v", port)
 	return address
@@ -77,7 +71,7 @@ func CreateProxyReplica(id int32, port int32) *Server {
 	return &tempReplica
 }
 
-func (s *Server) AddReplica(replica *Server) {
+func (s *Server) AddReplicaToMap(replica *Server) {
 	s.allServers[replica.id] = *replica
 }
 
@@ -92,7 +86,8 @@ func (s *Server) DisplayAllReplicas() {
 	}
 }
 
-func (s *Server) KillLeader() {
+// Mark leader as dead in the replica server map
+func (s *Server) KillLeaderLocally() {
 	for _, server := range s.allServers {
 		if server.primary {
 			temp := server
