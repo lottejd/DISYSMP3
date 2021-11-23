@@ -9,6 +9,7 @@ import (
 	"github.com/lottejd/DISYSMP3/Replica"
 )
 
+//server side
 func (s *Server) Bid(ctx context.Context, message *Auction.BidRequest) (*Auction.BidResponse, error) {
 	if message.Amount > s.this.highestBid {
 		s.UpdateBid(message.Amount, message.ClientId)
@@ -20,6 +21,7 @@ func (s *Server) Bid(ctx context.Context, message *Auction.BidRequest) (*Auction
 func (s *Server) Result(ctx context.Context, message *Auction.ResultRequest) (*Auction.ResultResponse, error) {
 	return &Auction.ResultResponse{BidderID: s.this.highestBidder, HighestBid: s.this.highestBid, Done: s.this.done}, nil
 }
+
 
 func (s *Server) UpdateBid(bid int32, bidId int32) {
 	s.this.highestBid = bid
@@ -51,7 +53,6 @@ func (s *Server) UpdateAllReplicaLogs(bid int32, bidId int32) string {
 					if strings.EqualFold(ack.GetAck(), "succes") {
 						succes = true
 					}
-
 				}
 			}
 		}

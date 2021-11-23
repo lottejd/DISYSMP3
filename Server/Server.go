@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/hpcloud/tail"
 	"github.com/lottejd/DISYSMP3/Auction"
 	"github.com/lottejd/DISYSMP3/Replica"
 	"google.golang.org/grpc"
@@ -15,33 +17,28 @@ import (
 type Server struct {
 	Replica.UnimplementedReplicaServiceServer
 	Auction.UnimplementedAuctionServiceServer
-	id         int32
-	primary    bool
-	port       int32
-	allServers map[int32]Server
-	alive      bool
-	arbiter    sync.Mutex
-	this       *AuctionType
+	id            int32
+	primary       bool
+	port          int32
+	allServers    map[int32]Server
+	alive         bool
+	arbiter       sync.Mutex
+	isPrimaryDead chan bool
+	this          *AuctionType //can be removed
 }
 
 func main() {
 
 	//init
-	isPrimaryDead := make(chan bool)
 	_, primaryReplicaConn := Connect(ServerPort)
 	server := CreateReplica(primaryReplicaConn)
+	server.isPrimaryDead = make(chan bool)
 
 	//setup listen on port
 	go Listen(server.port, &server)
 
 	// find and display all replicas
-	go func() {
-		for {
-			go server.DisplayAllReplicas()
-			time.Sleep(time.Second * 5)
-			go server.FindServersAndAddToMap()
-		}
-	}()
+	go Print(&server)
 
 	// Is it possible to use defer to restart the server as primary?
 	// defer server.PrimaryReplicaLoop()
@@ -51,18 +48,17 @@ func main() {
 		server.allServers[server.id] = server
 		go server.PrimaryReplicaLoop()
 	} else {
-		go server.ReplicaLoop(isPrimaryDead)
+		server.ReplicaLoop(server.isPrimaryDead)
 
 		for {
-			temp := <-isPrimaryDead
+			temp := <-server.isPrimaryDead
 			if temp {
 				fmt.Println("leader is dead find a new one")
 				server.KillLeaderLocally()
 				outcome := server.StartElection()
 				fmt.Println(outcome)
 				if outcome == "Winner" {
-					NewPrimaryReplica(&server)  // remove this from here since its being run in PrimaryReplicaLoop
-					server.PrimaryReplicaLoop() // run as go rutine?
+					go server.PrimaryReplicaLoop() // run as go rutine?
 					break
 				}
 			}
@@ -83,11 +79,21 @@ func NewPrimaryReplica(s *Server) {
 }
 
 func (s *Server) PrimaryReplicaLoop() {
-	NewPrimaryReplica(s)
 	fmt.Println(s.id)
 	time.Sleep(time.Second * 2)
 	// tilføj logic hvis der allerede er en auction forsæt på den
 	// hent sidste bud fra log
+	t, err := tail.TailFile(ServerLogFile+string(s.id), tail.Config{Follow: true})
+	if err != nil {
+		fmt.Errorf("Error: %v", err)
+	}
+	var latestBid string
+	for line := range t.Lines {
+		latestBid = line.Text
+	}
+	fmt.Println(latestBid)
+	//gør noget med seneste bud
+
 	for {
 		s.StartAuction()
 		time.Sleep(time.Minute * 5)
@@ -96,6 +102,7 @@ func (s *Server) PrimaryReplicaLoop() {
 }
 
 func (s *Server) ReplicaLoop(leaderStatus chan bool) {
+	go KillPrimaryFromClient(s)
 	for {
 		if s.primary {
 			break
@@ -105,19 +112,25 @@ func (s *Server) ReplicaLoop(leaderStatus chan bool) {
 		ctx := context.Background()
 		// Check if leader is dead
 		for _, server := range s.allServers {
-			if s.id != server.id && server.alive {
+			if s.id != server.id {
 				client, _ := ConnectToReplicaClient(server.port)
 				response, _ := client.CheckStatus(ctx, &Replica.GetStatusRequest{ServerId: s.id})
+				fmt.Println("what is the response " + strconv.FormatBool(response.GetPrimary()))
 				if response.GetPrimary() {
 					leaderIsDead = false
 					temp := server
 					temp.SetPrimary()
+					// fmt.Println(temp.ToString())
 					s.allServers[server.id] = temp
 				}
+			} else if len(s.allServers) == 1{
+				leaderIsDead = false
 			}
+			// fmt.Println(s.allServers[server.])
 		}
 
 		time.Sleep(time.Millisecond * 500)
+		fmt.Println("Is leader dead " + strconv.FormatBool(leaderIsDead))
 		if leaderIsDead {
 			leaderStatus <- leaderIsDead // use a channel to break the loop in main
 		}
@@ -132,10 +145,12 @@ func (s *Server) CheckStatus(ctx context.Context, request *Replica.GetStatusRequ
 	return &response, nil
 }
 
-// remove this method
-func (s *Server) ChooseNewLeader(ctx context.Context, request *Replica.WantToLeadRequest) (*Replica.VoteResponse, error) {
-	// implement
-	return nil, nil
+func (s *Server) KillPrimary(ctx context.Context, empty *Replica.EmptyRequest) (*Replica.Answer, error) {
+	if s.primary {
+		s.isPrimaryDead <- true
+		return &Replica.Answer{ServerId: s.id, Alive: false}, nil
+	}
+	return &Replica.Answer{ServerId: s.id, Alive: s.alive}, nil
 }
 
 // begin Election bully style
@@ -169,7 +184,7 @@ func (s *Server) Election(ctx context.Context, msg *Replica.ElectionMessage) (*R
 		temp := s.allServers[electionId]
 		temp.SetPrimary()
 		s.allServers[electionId] = temp
-		s.arbiter.Lock()
+		s.arbiter.Unlock()
 	}
 	response := Replica.Answer{ServerId: s.id, Alive: s.alive}
 
@@ -219,7 +234,7 @@ func CreateReplica(conn *grpc.ClientConn) Server {
 	return s
 }
 
-// ask leader for info to create a new replica
+// ask leader for info to create a new replica (gRPC)
 func (s *Server) CreateNewReplica(ctx context.Context, emptyRequest *Replica.EmptyRequest) (*Replica.ReplicaInfo, error) {
 	var highestId int32
 	var highestPort int32

@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/lottejd/DISYSMP3/Replica"
 	"google.golang.org/grpc"
@@ -90,6 +93,7 @@ func (s *Server) DisplayAllReplicas() {
 func (s *Server) KillLeaderLocally() {
 	for _, server := range s.allServers {
 		if server.primary && server.id != s.id {
+			fmt.Println("Did we reach KillLeaderLocally")
 			temp := server
 			temp.alive = false
 			temp.primary = false
@@ -98,26 +102,34 @@ func (s *Server) KillLeaderLocally() {
 	}
 }
 
-// deprecated
+func KillPrimaryFromClient(s *Server) {
+	fmt.Println("Sleeping")
+	time.Sleep(time.Second * 30)
+	fmt.Println("Done sleeping")
+	ctx := context.Background()
+	for _, server := range s.allServers {
+		ReplicaClient, _ := ConnectToReplicaClient(server.port)
+		ReplicaClient.KillPrimary(ctx, &Replica.EmptyRequest{})
+	}
 
-// func EvalServerId(conn *grpc.ClientConn) int32 {
+}
 
-// 	if IsConnectable(conn) {
-// 		client := Replica.NewReplicaServiceClient(conn)
-// 		response, _ := client.CreateNewReplica(context.Background(), &Replica.EmptyRequest{})
-// 		return response.GetServerId()
-// 	}
-// 	return 0
-// }
+func waitForInput(s *Server) string {
+	fmt.Printf("Replica ID %v - ", s.id)
+	// to ensure "enter" has been hit before publishing - skud ud til Mie
+	reader, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	// remove newline windows format "\r\n"
+	if err != nil {
+		return "bad input"
+	}
+	input := strings.TrimSuffix(reader, "\r\n")
+	return input
+}
 
-// func EvalPort(conn *grpc.ClientConn) int32 {
-// 	var port int32
-// 	if IsConnectable(conn) {
-// 		client := Replica.NewReplicaServiceClient(conn)
-// 		response, _ := client.CreateNewReplica(context.Background(), &Replica.EmptyRequest{})
-// 		port = response.GetPort()
-// 	} else {
-// 		port = ServerPort
-// 	}
-// 	return port
-// }
+func Print(server *Server) {
+	for {
+		go server.DisplayAllReplicas()
+		time.Sleep(time.Second * 5)
+		go server.FindServersAndAddToMap()
+	}
+}

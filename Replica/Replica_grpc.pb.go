@@ -18,11 +18,11 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ReplicaServiceClient interface {
-	ChooseNewLeader(ctx context.Context, in *WantToLeadRequest, opts ...grpc.CallOption) (*VoteResponse, error)
 	CheckStatus(ctx context.Context, in *GetStatusRequest, opts ...grpc.CallOption) (*StatusResponse, error)
 	CreateNewReplica(ctx context.Context, in *EmptyRequest, opts ...grpc.CallOption) (*ReplicaInfo, error)
 	WriteToLog(ctx context.Context, in *Auction, opts ...grpc.CallOption) (*Ack, error)
 	Election(ctx context.Context, in *ElectionMessage, opts ...grpc.CallOption) (*Answer, error)
+	KillPrimary(ctx context.Context, in *EmptyRequest, opts ...grpc.CallOption) (*Answer, error)
 }
 
 type replicaServiceClient struct {
@@ -31,15 +31,6 @@ type replicaServiceClient struct {
 
 func NewReplicaServiceClient(cc grpc.ClientConnInterface) ReplicaServiceClient {
 	return &replicaServiceClient{cc}
-}
-
-func (c *replicaServiceClient) ChooseNewLeader(ctx context.Context, in *WantToLeadRequest, opts ...grpc.CallOption) (*VoteResponse, error) {
-	out := new(VoteResponse)
-	err := c.cc.Invoke(ctx, "/Replica.ReplicaService/ChooseNewLeader", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 func (c *replicaServiceClient) CheckStatus(ctx context.Context, in *GetStatusRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
@@ -78,15 +69,24 @@ func (c *replicaServiceClient) Election(ctx context.Context, in *ElectionMessage
 	return out, nil
 }
 
+func (c *replicaServiceClient) KillPrimary(ctx context.Context, in *EmptyRequest, opts ...grpc.CallOption) (*Answer, error) {
+	out := new(Answer)
+	err := c.cc.Invoke(ctx, "/Replica.ReplicaService/KillPrimary", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ReplicaServiceServer is the server API for ReplicaService service.
 // All implementations must embed UnimplementedReplicaServiceServer
 // for forward compatibility
 type ReplicaServiceServer interface {
-	ChooseNewLeader(context.Context, *WantToLeadRequest) (*VoteResponse, error)
 	CheckStatus(context.Context, *GetStatusRequest) (*StatusResponse, error)
 	CreateNewReplica(context.Context, *EmptyRequest) (*ReplicaInfo, error)
 	WriteToLog(context.Context, *Auction) (*Ack, error)
 	Election(context.Context, *ElectionMessage) (*Answer, error)
+	KillPrimary(context.Context, *EmptyRequest) (*Answer, error)
 	mustEmbedUnimplementedReplicaServiceServer()
 }
 
@@ -94,9 +94,6 @@ type ReplicaServiceServer interface {
 type UnimplementedReplicaServiceServer struct {
 }
 
-func (UnimplementedReplicaServiceServer) ChooseNewLeader(context.Context, *WantToLeadRequest) (*VoteResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ChooseNewLeader not implemented")
-}
 func (UnimplementedReplicaServiceServer) CheckStatus(context.Context, *GetStatusRequest) (*StatusResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CheckStatus not implemented")
 }
@@ -109,6 +106,9 @@ func (UnimplementedReplicaServiceServer) WriteToLog(context.Context, *Auction) (
 func (UnimplementedReplicaServiceServer) Election(context.Context, *ElectionMessage) (*Answer, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Election not implemented")
 }
+func (UnimplementedReplicaServiceServer) KillPrimary(context.Context, *EmptyRequest) (*Answer, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method KillPrimary not implemented")
+}
 func (UnimplementedReplicaServiceServer) mustEmbedUnimplementedReplicaServiceServer() {}
 
 // UnsafeReplicaServiceServer may be embedded to opt out of forward compatibility for this service.
@@ -120,24 +120,6 @@ type UnsafeReplicaServiceServer interface {
 
 func RegisterReplicaServiceServer(s grpc.ServiceRegistrar, srv ReplicaServiceServer) {
 	s.RegisterService(&ReplicaService_ServiceDesc, srv)
-}
-
-func _ReplicaService_ChooseNewLeader_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WantToLeadRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ReplicaServiceServer).ChooseNewLeader(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/Replica.ReplicaService/ChooseNewLeader",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ReplicaServiceServer).ChooseNewLeader(ctx, req.(*WantToLeadRequest))
-	}
-	return interceptor(ctx, in, info, handler)
 }
 
 func _ReplicaService_CheckStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -212,6 +194,24 @@ func _ReplicaService_Election_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ReplicaService_KillPrimary_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EmptyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ReplicaServiceServer).KillPrimary(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/Replica.ReplicaService/KillPrimary",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ReplicaServiceServer).KillPrimary(ctx, req.(*EmptyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ReplicaService_ServiceDesc is the grpc.ServiceDesc for ReplicaService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -219,10 +219,6 @@ var ReplicaService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "Replica.ReplicaService",
 	HandlerType: (*ReplicaServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "ChooseNewLeader",
-			Handler:    _ReplicaService_ChooseNewLeader_Handler,
-		},
 		{
 			MethodName: "CheckStatus",
 			Handler:    _ReplicaService_CheckStatus_Handler,
@@ -238,6 +234,10 @@ var ReplicaService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Election",
 			Handler:    _ReplicaService_Election_Handler,
+		},
+		{
+			MethodName: "KillPrimary",
+			Handler:    _ReplicaService_KillPrimary_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
