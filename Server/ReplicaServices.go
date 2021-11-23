@@ -26,39 +26,9 @@ func IsConnectable(conn *grpc.ClientConn) bool {
 func EvalPrimary(conn *grpc.ClientConn) bool {
 	return !IsConnectable(conn)
 }
-
-// maybe this is redundant since FindServersAndAddToMap() does this anyways
-func EvalServers(conn *grpc.ClientConn, replicaInfo *Replica.ReplicaInfo) map[int32]Server {
-	serverMap := make(map[int32]Server)
-	if IsConnectable(conn) {
-		for _, replica := range replicaInfo.Replicas {
-			serverMap[replica.GetServerId()] = *CreateProxyReplica(replica.GetServerId(), replica.GetPort())
-		}
-	}
-	return serverMap
-}
-
-// maybe this is redundant since FindServersAndAddToMap() does this anyways
-func (s *Server) ServerMapToReplicaInfoArray() []*Replica.ReplicaInfo {
-	var servers []*Replica.ReplicaInfo
-	for _, Server := range s.allServers {
-		temp := Replica.ReplicaInfo{ServerId: Server.id, Port: Server.port}
-		servers = append(servers, &temp)
-	}
-	return servers
-}
-
 func (s *Server) FindServersAndAddToMap() {
 	for i := 0; i < 10; i++ {
 		if int(s.id) == i {
-			// if s.primary {
-			// 	fmt.Println("")
-			// 	// remove and add replica to update the map 
-			// 	temp := s.allServers[s.id]
-			// 	temp.SetPrimary()
-			// 	s.RemoveReplicaFromMap(s.id)
-			// 	s.AddReplicaToMap(&temp)
-			// }
 			continue
 		}
 
@@ -84,8 +54,6 @@ func (s *Server) RemoveReplicaFromMap(serverId int32) {
 	delete(s.allServers, serverId)
 }
 
-// split this method into StartReplicaService and StartAuctionService
-// and add retrys for StartReplicaService
 func Listen(port int32, s *Server) {
 	// start peer to peer service
 	go StartReplicaService(port, s)

@@ -40,10 +40,6 @@ func main() {
 	// find and display all replicas
 	go Print(&server)
 
-	// Is it possible to use defer to restart the server as primary?
-	// defer server.PrimaryReplicaLoop()
-
-	// start the service / server on the specific port
 	if server.primary {
 		server.allServers[server.id] = server
 		go server.PrimaryReplicaLoop()
@@ -56,8 +52,21 @@ func main() {
 				fmt.Println("leader is dead find a new one")
 				server.KillLeaderLocally()
 				outcome := server.StartElection()
-				fmt.Println(outcome)
 				if outcome == "Winner" {
+					time.Sleep(time.Second * 2)
+					// tilføj logic hvis der allerede er en auction forsæt på den
+					// hent sidste bud fra log
+					go server.PrimaryReplicaLoop()
+					break
+				}
+			}
+		}
+	}
+	for {
+	}
+}
+
+func (s *Server) PrimaryReplicaLoop() {
 	fmt.Println(s.id)
 	time.Sleep(time.Second * 2)
 	// tilføj logic hvis der allerede er en auction forsæt på den
@@ -94,18 +103,16 @@ func (s *Server) ReplicaLoop(leaderStatus chan bool) {
 			if s.id != server.id {
 				client, _ := ConnectToReplicaClient(server.port)
 				response, _ := client.CheckStatus(ctx, &Replica.GetStatusRequest{ServerId: s.id})
-				fmt.Println("what is the response " + strconv.FormatBool(response.GetPrimary()))
 				if response.GetPrimary() {
 					leaderIsDead = false
 					temp := server
 					temp.SetPrimary()
-					// fmt.Println(temp.ToString())
 					s.allServers[server.id] = temp
 				}
-			} else if len(s.allServers) == 1{
+			} else if len(s.allServers) == 1 {
 				leaderIsDead = false
 			}
-			// fmt.Println(s.allServers[server.])
+
 		}
 
 		time.Sleep(time.Millisecond * 500)
@@ -119,8 +126,7 @@ func (s *Server) ReplicaLoop(leaderStatus chan bool) {
 
 // gRPC service sends replicas own status
 func (s *Server) CheckStatus(ctx context.Context, request *Replica.GetStatusRequest) (*Replica.StatusResponse, error) {
-	replicas := s.ServerMapToReplicaInfoArray()
-	response := Replica.StatusResponse{ServerId: s.id, Primary: s.primary, Replicas: replicas}
+	response := Replica.StatusResponse{ServerId: s.id, Primary: s.primary}
 	return &response, nil
 }
 
@@ -183,9 +189,6 @@ func (s *Server) Election(ctx context.Context, msg *Replica.ElectionMessage) (*R
 			s.SetPrimary()
 		}
 	}
-
-	// if s is small guy just wait no response :-(
-	fmt.Println(response.GetServerId())
 	return &response, nil
 }
 
@@ -197,7 +200,7 @@ func CreateReplica(conn *grpc.ClientConn) Server {
 	replicaInfo, err := client.CreateNewReplica(context.Background(), &Replica.EmptyRequest{})
 
 	primary := EvalPrimary(conn)
-	allServers := EvalServers(conn, replicaInfo)
+	allServers := make(map[int32]Server)
 	if err != nil {
 		fmt.Println(err.Error())
 		port = ServerPort
@@ -223,8 +226,7 @@ func (s *Server) CreateNewReplica(ctx context.Context, emptyRequest *Replica.Emp
 	}
 	highestId += 1
 	highestPort += 1
-	replicas := s.ServerMapToReplicaInfoArray()
-	response := Replica.ReplicaInfo{ServerId: (highestId), Port: (highestPort), Replicas: replicas}
+	response := Replica.ReplicaInfo{ServerId: (highestId), Port: (highestPort)}
 
 	// add new server to map
 	temp := CreateProxyReplica((highestId), (highestPort))

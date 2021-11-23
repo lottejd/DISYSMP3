@@ -128,8 +128,8 @@ func waitForInput(s *Server) string {
 
 func Print(server *Server) {
 	for {
-		go server.DisplayAllReplicas()
+		server.DisplayAllReplicas()
 		time.Sleep(time.Second * 5)
-		go server.FindServersAndAddToMap()
+		server.FindServersAndAddToMap()
 	}
 }
