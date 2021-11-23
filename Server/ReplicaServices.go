@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"strconv"
 
@@ -27,27 +26,30 @@ func EvalPrimary(conn *grpc.ClientConn) bool {
 	return !IsConnectable(conn)
 }
 func (s *Server) FindServersAndAddToMap() {
+	ctx := context.Background()
 	for i := 0; i < 10; i++ {
 		if int(s.id) == i {
-			continue
-		}
-
-		serverId, conn := Connect(int32(ServerPort + i))
-		if IsConnectable(conn) {
-			replica := CreateProxyReplica(serverId, int32(ServerPort+i))
-			replicaClient, _ := ConnectToReplicaClient(replica.port)
-
-			request := Replica.GetStatusRequest{ServerId: replica.id}
-			response, _ := replicaClient.CheckStatus(context.Background(), &request)
-			if response.Primary {
-				replica.SetPrimary()
-			}
-			s.AddReplicaToMap(replica)
+			s.allServers[s.id] = *s
 		} else {
-			// if no connection is 
-			s.RemoveReplicaFromMap(serverId)
+			serverId, conn := Connect(int32(ServerPort + i))
+			if IsConnectable(conn) {
+				replica := CreateProxyReplica(serverId, int32(ServerPort+i))
+				replicaClient, _ := ConnectToReplicaClient(replica.port)
+
+				request := Replica.GetStatusRequest{ServerId: replica.id}
+				response, _ := replicaClient.CheckStatus(ctx, &request)
+				if response.Primary {
+					replica.SetPrimary()
+				}
+				s.AddReplicaToMap(replica)
+				conn.Close()
+			} else {
+				// fmt.Printf("removing: %v from the map\n", i)
+				s.RemoveReplicaFromMap(int32(i))
+			}
 		}
 	}
+	ctx.Done()
 }
 
 func (s *Server) RemoveReplicaFromMap(serverId int32) {
@@ -67,11 +69,12 @@ func Listen(port int32, s *Server) {
 
 func StartReplicaService(port int32, s *Server) {
 	lis, _ := net.Listen("tcp", FormatAddress(port))
+	defer lis.Close()
 
 	grpcServer := grpc.NewServer()
 	Replica.RegisterReplicaServiceServer(grpcServer, s)
 	if err := grpcServer.Serve(lis); err != nil {
-		log.Fatalf("Failed to serve on")
+		fmt.Printf("Failed to serve %v on port %v\n", s.id, port)
 	}
 
 }
@@ -83,6 +86,6 @@ func StartAuctionService(s *Server) {
 
 	Auction.RegisterAuctionServiceServer(grpcServer, s)
 	if err := grpcServer.Serve(lis); err != nil {
-		log.Fatalf("Failed to serve gRPC server over port %v  %v", ClientPort, err)
+		fmt.Printf("Failed to serve %v on port %v\n", s.id, ClientPort)
 	}
 }

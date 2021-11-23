@@ -26,13 +26,15 @@ type AuctionType struct {
 	done          bool
 }
 
-// move this into ConnectToReplicaClient or refactor
+func CloseConnectionAndCtx(ctx context.Context, conn *grpc.ClientConn) {
+	conn.Close()
+	ctx.Done()
+}
+
 func Connect(port int32) (int32, *grpc.ClientConn) {
-	// The first attempt will return an error witch will give the first replica ID 0
-	// After that it will connect to the port given as a parameter
 	conn, err := grpc.Dial(FormatAddress(port), grpc.WithInsecure())
 	if err != nil {
-		return 0, nil
+		return -1, nil
 	}
 
 	client := Replica.NewReplicaServiceClient(conn)
@@ -70,7 +72,7 @@ func (s *Server) ToString() string {
 }
 
 func CreateProxyReplica(id int32, port int32) *Server {
-	tempReplica := Server{id: id, primary: false, port: port, allServers: nil, alive: true, this: nil}
+	tempReplica := Server{id: id, primary: false, port: port, allServers: make(map[int32]Server), alive: true, this: nil}
 	return &tempReplica
 }
 
@@ -93,7 +95,7 @@ func (s *Server) DisplayAllReplicas() {
 func (s *Server) KillLeaderLocally() {
 	for _, server := range s.allServers {
 		if server.primary && server.id != s.id {
-			fmt.Println("Did we reach KillLeaderLocally")
+			fmt.Println("We reacheached KillLeaderLocally")
 			temp := server
 			temp.alive = false
 			temp.primary = false
@@ -104,12 +106,18 @@ func (s *Server) KillLeaderLocally() {
 
 func KillPrimaryFromClient(s *Server) {
 	fmt.Println("Sleeping")
-	time.Sleep(time.Second * 30)
+	time.Sleep(time.Second * 10)
 	fmt.Println("Done sleeping")
 	ctx := context.Background()
 	for _, server := range s.allServers {
-		ReplicaClient, _ := ConnectToReplicaClient(server.port)
-		ReplicaClient.KillPrimary(ctx, &Replica.EmptyRequest{})
+		fmt.Printf("Trying to kill: %v", server.id)
+		ReplicaClient, ack := ConnectToReplicaClient(server.port)
+		answer, err := ReplicaClient.KillPrimary(ctx, &Replica.EmptyRequest{})
+		if err != nil {
+			fmt.Printf("Couldn't kill: %v", server.id)
+		} else if !answer.Alive {
+			fmt.Printf("%s primary %v reached\n", ack, answer.ServerId)
+		}
 	}
 
 }
@@ -127,9 +135,13 @@ func waitForInput(s *Server) string {
 }
 
 func Print(server *Server) {
+	counter := 0
 	for {
+		server.FindServersAndAddToMap()
+		fmt.Printf("Round: %v ", counter)
+		counter++
 		server.DisplayAllReplicas()
 		time.Sleep(time.Second * 5)
-		server.FindServersAndAddToMap()
+
 	}
 }
