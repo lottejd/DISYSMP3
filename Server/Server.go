@@ -57,6 +57,7 @@ func main() {
 				if outcome == "Winner" {
 					fmt.Println(outcome)
 					server.SetPrimary()
+					server.port = ServerPort
 					go StartReplicaService(ServerPort, &server)
 					go StartAuctionService(&server)
 					time.Sleep(time.Second * 2)
