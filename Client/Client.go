@@ -72,12 +72,11 @@ func listenForInput(client Auction.AuctionServiceClient, ctx context.Context) {
 			switch input {
 			case "bid":
 				fmt.Println("How much would you like to bid?")
-				fmt.Scan(&input)
+				fmt.Scanln(&input)
 				bid, err := strconv.Atoi(input)
 				if err != nil {
 					fmt.Errorf("Error: %v", err)
 				} else {
-					fmt.Println(client)
 					Bid(client, ctx, int32(bid))
 				}
 				break
@@ -90,6 +89,8 @@ func listenForInput(client Auction.AuctionServiceClient, ctx context.Context) {
 	}
 }
 
+
+// below is not used
 //*Auction.AuctionServiceClient implement
 func reconnect(client Auction.AuctionServiceClient) {
 	var tempConnected bool

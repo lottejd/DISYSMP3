@@ -16,14 +16,15 @@ import (
 type Server struct {
 	Replica.UnimplementedReplicaServiceServer
 	Auction.UnimplementedAuctionServiceServer
-	id         int32
-	primary    bool
-	port       int32
-	allServers map[int32]Server
-	alive      bool
-	//arbiter       sync.Mutex
-	isPrimaryDead chan bool
-	this          *AuctionType //can be removed
+	id             int32
+	primary        bool
+	port           int32
+	allServers     map[int32]Server
+	alive          bool
+	isPrimaryDead  chan bool
+	this           *AuctionType
+	replicaService Service
+	auctionService Service
 }
 
 func main() {
@@ -35,6 +36,7 @@ func main() {
 	ctx := context.Background()
 
 	//setup listen on port
+	fmt.Println(server.port)
 	go StartReplicaService(server.port, &server)
 
 	// find and display all replicas
@@ -43,11 +45,12 @@ func main() {
 	if server.primary {
 		server.allServers[server.id] = server
 		go StartAuctionService(&server)
-		go server.PrimaryReplicaLoop(server.isPrimaryDead)
+		go server.PrimaryReplicaLoop()
 	} else {
-		go server.ReplicaLoop(server.isPrimaryDead)
+		go server.ReplicaLoop()
 
 		for {
+			fmt.Println("hello 1")
 			temp := <-server.isPrimaryDead
 			fmt.Printf("Server chan says isPrimaryDead: %v\n", temp)
 			if temp {
@@ -60,10 +63,7 @@ func main() {
 					server.port = ServerPort
 					go StartReplicaService(ServerPort, &server)
 					go StartAuctionService(&server)
-					time.Sleep(time.Second * 2)
-					// tilføj logic hvis der allerede er en auction forsæt på den
-					// hent sidste bud fra log
-					go server.PrimaryReplicaLoop(server.isPrimaryDead)
+					go server.PrimaryReplicaLoop()
 					break
 				}
 			}
@@ -73,7 +73,6 @@ func main() {
 	for server.primary {
 		fmt.Println("inside last loop")
 		temp := <-server.isPrimaryDead
-		server.isPrimaryDead <- temp
 		fmt.Println("bye main")
 		server.primary = !temp
 		CloseConnectionAndCtx(ctx, primaryReplicaConn)
@@ -81,41 +80,53 @@ func main() {
 
 }
 
-func (s *Server) PrimaryReplicaLoop(leaderStatus chan bool) {
+func (s *Server) PrimaryReplicaLoop() {
 	var KillThisServer bool
-	fmt.Println(s.id)
-	time.Sleep(time.Second * 2)
+	fmt.Printf("New primary id: %v\n", s.id)
 	// tilføj logic hvis der allerede er en auction forsæt på den
 	// hent sidste bud fra log
-	t, err := tail.TailFile(ServerLogFile+string(s.id), tail.Config{Follow: true})
+	t, err := tail.TailFile(ServerLogFile+strconv.Itoa(int(s.id)), tail.Config{Follow: true})
 	if err != nil {
-		fmt.Errorf("Error: %v", err)
+		fmt.Printf("Error: %v\n", err)
 	}
 	var latestBid string
+	fmt.Println(t.Filename)
+	fmt.Println(latestBid)
 	for line := range t.Lines {
 		latestBid = line.Text
 	}
 	fmt.Println(latestBid)
-	//gør noget med seneste bud
-	go func() {
-		fmt.Println("starting auction")
-		s.StartAuction()
-		time.Sleep(time.Minute * 3)
-		fmt.Println("Ending auction")
-		s.EndAuction()
-	}()
+	if latestBid != "" {
+		split := strings.Fields(latestBid)
+		bid, _ := strconv.Atoi(split[3])
+		bidder, _ := strconv.Atoi(split[6])
+		fmt.Println(split[3])
+		s.this.highestBid = int32(bid)
+		s.this.highestBidder = int32(bidder)
+	} else {
+		//gør noget med seneste bud
+		go func() {
+			fmt.Println("starting auction")
+			s.StartAuction()
+			time.Sleep(time.Minute * 3)
+			fmt.Println("Ending auction")
+			s.EndAuction()
+		}()
+	}
 	for !KillThisServer {
-		temp := <-leaderStatus
-		leaderStatus <- temp
+		temp := <-s.isPrimaryDead
 		println("Primary should die")
 		KillThisServer = temp
+		s.auctionService.lis.Close()
 	}
 }
 
-func (s *Server) ReplicaLoop(leaderStatus chan bool) {
+func (s *Server) ReplicaLoop() {
 	go KillPrimaryFromClient(s)
 	for {
 		if s.primary {
+			fmt.Println("im breaking the replica loop to become primary")
+			s.replicaService.stopService <- true
 			break
 		}
 
@@ -135,13 +146,10 @@ func (s *Server) ReplicaLoop(leaderStatus chan bool) {
 			} else if len(s.allServers) == 1 {
 				leaderIsDead = false
 			}
-
+			ctx.Done()
 		}
-
-		time.Sleep(time.Millisecond * 500)
-		fmt.Println("Is leader dead " + strconv.FormatBool(leaderIsDead))
 		if leaderIsDead {
-			leaderStatus <- leaderIsDead // use a channel to break the loop in main
+			s.isPrimaryDead <- leaderIsDead // use a channel to break the loop in main
 		}
 		time.Sleep(time.Second * 2)
 	}
@@ -185,15 +193,12 @@ func (s *Server) StartElection() string {
 }
 
 func (s *Server) Election(ctx context.Context, msg *Replica.ElectionMessage) (*Replica.Answer, error) {
-	// implement
-	// Election invoked by another replica
+
 	electionId := msg.GetServerId()
 	if strings.EqualFold("Winner", msg.GetMsg()) && electionId > s.id {
-		// s.arbiter.Lock()
 		temp := s.allServers[electionId]
 		temp.SetPrimary()
 		s.allServers[electionId] = temp
-		// s.arbiter.Unlock()
 	}
 	response := Replica.Answer{ServerId: s.id, Alive: s.alive}
 
@@ -225,7 +230,9 @@ func CreateReplica(conn *grpc.ClientConn) Server {
 
 	primary := EvalPrimary(conn)
 	allServers := make(map[int32]Server)
-	if err != nil {
+	fmt.Println(IsConnectable(conn))
+	if !IsConnectable(conn) {
+		fmt.Println(err)
 		port = ServerPort
 		id = 0
 	} else {

@@ -110,7 +110,10 @@ func KillPrimaryFromClient(s *Server) {
 	fmt.Println("Done sleeping")
 	ctx := context.Background()
 	for _, server := range s.allServers {
-		fmt.Printf("Trying to kill: %v", server.id)
+		if server.port == s.port {
+			continue
+		}
+		fmt.Printf("Trying to kill: %v\n", server.id)
 		ReplicaClient, ack := ConnectToReplicaClient(server.port)
 		answer, err := ReplicaClient.KillPrimary(ctx, &Replica.EmptyRequest{})
 		if err != nil {
@@ -119,7 +122,7 @@ func KillPrimaryFromClient(s *Server) {
 			fmt.Printf("%s primary %v reached\n", ack, answer.ServerId)
 		}
 	}
-
+	ctx.Done()
 }
 
 func waitForInput(s *Server) string {
@@ -135,13 +138,15 @@ func waitForInput(s *Server) string {
 }
 
 func Print(server *Server) {
-	counter := 0
+	x := 0
+	c := Counter{counter: x}
+	round := 0
 	for {
-		server.FindServersAndAddToMap()
-		fmt.Printf("Round: %v ", counter)
-		counter++
+		server.FindServersAndAddToMap(&c)
+		fmt.Printf("Round: %v ", round)
+		round++
 		server.DisplayAllReplicas()
-		time.Sleep(time.Second * 5)
+		time.Sleep(time.Second * 2)
 
 	}
 }
