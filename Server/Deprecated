@@ -14,6 +14,17 @@ import (
 	"google.golang.org/grpc"
 )
 
+func Max(this int32, that int32) int32 {
+	if this < that {
+		return that
+	}
+	return this
+}
+
+func (s *Server) ToString() string {
+	return fmt.Sprintf("Server id: %v, server port: %v", s.id, s.port)
+}
+
 // read from log
 t, err := tail.TailFile(ServerLogFile+strconv.Itoa(int(s.id)), tail.Config{Follow: true})
 if err != nil {

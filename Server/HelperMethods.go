@@ -12,7 +12,6 @@ import (
 )
 
 func Logger(message string, logFileName string) {
-	// path, err := os.Create(filepath.Joi)
 	f, err := os.OpenFile(logFileName, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatalf("error opening file: %v", err)
@@ -23,20 +22,11 @@ func Logger(message string, logFileName string) {
 	log.Println(message)
 }
 
-func Max(this int32, that int32) int32 {
-	if this < that {
-		return that
-	}
-	return this
-}
+
 
 func FormatAddress(port int32) string {
 	address := fmt.Sprintf("localhost:%v", port)
 	return address
-}
-
-func (s *Server) ToString() string {
-	return fmt.Sprintf("Server id: %v, server port: %v", s.id, s.port)
 }
 
 // connect to a replica with at max 3 retries
