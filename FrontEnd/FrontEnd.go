@@ -53,7 +53,7 @@ func (feServer *FrontEndServer) Bid(ctx context.Context, message *Auction.BidReq
 	fmt.Println(status)
 
 	newBid := message.GetAmount()
-	if currentBid.Bid < newBid && feServer.EvalAuctionStillGoing(time.Now()) {
+	if currentBid.Bid < newBid && feServer.EvalAuctionDone(time.Now()) {
 		feServer.UpdateBid(newBid, message.GetClientId())
 		return &Auction.BidResponse{Success: true}, nil
 	}
@@ -86,41 +86,46 @@ func (feServer *FrontEndServer) UpdateBid(bid int32, bidderId int32) {
 	fmt.Println(msg)
 }
 
-func (feServer *FrontEndServer) CreateAuction(logMsg string) (AuctionType, int) {
+func (feServer *FrontEndServer) CreateAuctionFromLog(logMsg string) AuctionFromLog {
 	splitMsg := strings.Fields(logMsg)
 	var bid, bidder, replicaPort int
 	for i, subMsg := range splitMsg {
 		switch subMsg {
 		case "HighestBid:":
-			fmt.Println(splitMsg[i+1])
 			bid, _ = strconv.Atoi(splitMsg[i+1])
 		case "id:":
-			fmt.Println(splitMsg[i+1])
 			bidder, _ = strconv.Atoi(splitMsg[i+1])
 		case "port:":
-			fmt.Println(splitMsg[i+1])
 			replicaPort, _ = strconv.Atoi(splitMsg[i+1])
 			break
 		}
 	}
-	return AuctionType{Bid: int32(bid), Bidder: int32(bidder), done: feServer.EvalAuctionStillGoing(time.Now())}, replicaPort
+	auction := AuctionType{Bid: int32(bid), Bidder: int32(bidder), done: feServer.EvalAuctionDone(time.Now())}
+	return AuctionFromLog{latestAuction: auction, replicaPort: int32(replicaPort)}
+}
+
+type AuctionFromLog struct {
+	latestAuction AuctionType
+	replicaPort   int32
 }
 
 func (feServer *FrontEndServer) GetHighestBidFromReplicas() (AuctionType, string) {
 	// implement
 	latestLogs := feServer.ReadFromLog()
-	latestAuctionsFromLogs := make([]AuctionType, 10)
+	latestAuctionsFromLogs := make([]AuctionFromLog, 10)
 	for _, Msg := range latestLogs {
-		auction, replicaPort := feServer.CreateAuction(Msg)
-		latestAuctionsFromLogs = append(latestAuctionsFromLogs, auction)
-		fmt.Println(replicaPort)
+		if strings.Contains(Msg, "replica port:") {
+			fmt.Println(Msg)
+			auction := feServer.CreateAuctionFromLog(Msg)
+			latestAuctionsFromLogs = append(latestAuctionsFromLogs, auction)
+		}
 	}
 
-	// splitLatestMsg := strings.Fields(latestLogs[len(latestLogs)-1])
 	for _, auctions := range latestAuctionsFromLogs {
-		fmt.Println(auctions)
+		if auctions.replicaPort >= 5000 {
+			fmt.Println(auctions)
+		}
 	}
-	fmt.Println(len(latestAuctionsFromLogs))
 
 	// get bid from all replicas maybe use timestamps or just r = w = n-1/2
 	// the value repeating the most or quorum wins
@@ -131,7 +136,7 @@ func (feServer *FrontEndServer) ReadFromLog() []string {
 	replicaMsgs := make([]string, len(feServer.replicaServerPorts))
 	err := os.Chdir("../Server") // læs fra server directory
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println(err.Error())
 	}
 	for replica, alive := range feServer.replicaServerPorts {
 		if alive {
@@ -147,7 +152,7 @@ func (feServer *FrontEndServer) ReadFromLog() []string {
 			for line := range t.Lines {
 				latestMsg = line.Text
 			}
-			latestMsgAndPort := fmt.Sprintf("%s  replica port: %v", latestMsg, replica)
+			latestMsgAndPort := fmt.Sprintf("%s replica port: %v", latestMsg, replica)
 			replicaMsgs = append(replicaMsgs, latestMsgAndPort)
 		}
 	}
@@ -167,7 +172,7 @@ func (feServer *FrontEndServer) UpdateAllReplicas(auction AuctionType) string {
 				replicaClient, status := ConnectToReplicaClient(conn)
 				response, err := replicaClient.WriteToLog(ctx, &request)
 				if err != nil {
-					fmt.Println(err)
+					fmt.Println(err.Error())
 				} else if response.GetMsg() != "succes" || status == "failed" {
 					failedWrites++
 				}
@@ -206,11 +211,11 @@ func (feServer *FrontEndServer) FindReplicasAndAddThemToMap() {
 	ctx.Done()
 }
 
-func (feServer *FrontEndServer) EvalAuctionStillGoing(current time.Time) bool {
+func (feServer *FrontEndServer) EvalAuctionDone(current time.Time) bool {
 
-	fmt.Println(feServer.startTime.Format(time.Layout))
-	fmt.Println(current.Format(time.Layout))
-	return true // implement
+	fmt.Println(feServer.startTime.Format(time.Stamp))
+	fmt.Println(current.Format(time.Stamp))
+	return false // implement
 }
 
 // grcp server setup
