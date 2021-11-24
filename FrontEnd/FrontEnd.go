@@ -12,7 +12,11 @@ import (
 	"google.golang.org/grpc"
 )
 
-const ClientPort = 8080
+const (
+	CLIENT_PORT             = 8080
+	SERVER_PORT             = 5000
+	REPLICA_STATUS_RESPONSE = "Alive and well"
+)
 
 type AuctionType struct {
 	Bid    int32
@@ -32,6 +36,7 @@ func main() {
 	replicaServerMap := make(map[int]bool)
 	startTime := time.Now()
 	feServer := FrontEndServer{this: &proxyAuction, startTime: &startTime, replicaServerPorts: replicaServerMap}
+	go feServer.FindReplicasAndAddThemToMap()
 	listen(&feServer)
 
 	fmt.Scanln()
@@ -71,15 +76,16 @@ func (feServer *FrontEndServer) Result(ctx context.Context, message *Auction.Res
 func (feServer *FrontEndServer) UpdateBid(bid int32, bidderId int32) {
 
 	newAuction := AuctionType{Bid: bid, Bidder: bidderId, done: false}
-	feServer.UpdateAllReplicas(newAuction) // implement
+	msg := feServer.UpdateAllReplicas(newAuction) // implement
 	feServer.this = &newAuction
+	fmt.Println(msg)
 }
 
 func (feServer *FrontEndServer) GetHighestBidFromReplicas() (AuctionType, string) {
 	// implement
 	// get bid from all replicas maybe use timestamps or just r = w = n-1/2
 	// the value repeating the most or quorum wins
-	return *feServer.this, "succesfully got the bid from frontend"
+	return *feServer.this, "succesfully got the bid from client"
 }
 
 func (feServer *FrontEndServer) UpdateAllReplicas(auction AuctionType) string {
@@ -96,7 +102,7 @@ func (feServer *FrontEndServer) UpdateAllReplicas(auction AuctionType) string {
 				response, err := replicaClient.WriteToLog(ctx, &request)
 				if err != nil {
 					fmt.Println(err)
-				} else if response.GetAck() != "succes" || status == "failed" {
+				} else if response.GetMsg() != "succes" || status == "failed" {
 					failedWrites++
 				}
 				conn.Close()
@@ -109,6 +115,31 @@ func (feServer *FrontEndServer) UpdateAllReplicas(auction AuctionType) string {
 	return "failed to update more than half of the replicas"
 }
 
+// find replicas and add
+func (feServer *FrontEndServer) FindReplicasAndAddThemToMap() {
+	ctx := context.Background()
+	counter := 0
+	i := 0
+	for counter <= 3 {
+		port := SERVER_PORT + i
+		conn, status := Connect(port)
+		i++
+
+		if status == "succes" {
+			replicaClient, status := ConnectToReplicaClient(conn)
+			response, err := replicaClient.CheckStatus(ctx, &Replica.EmptyRequest{})
+			if err != nil || status == "failed" {
+				feServer.replicaServerPorts[port] = false
+			} else if response.GetMsg() == REPLICA_STATUS_RESPONSE {
+				feServer.replicaServerPorts[port] = true
+				fmt.Printf("found port: %v\n", port)
+			}
+		}
+		counter++
+	}
+	ctx.Done()
+}
+
 func (feServer *FrontEndServer) EvalAuctionStillGoing(current time.Time) bool {
 	fmt.Println(feServer.startTime)
 	return true // implement
@@ -116,25 +147,24 @@ func (feServer *FrontEndServer) EvalAuctionStillGoing(current time.Time) bool {
 
 // grcp server setup
 func listen(feServer *FrontEndServer) {
-	address := fmt.Sprintf("localhost:%v", ClientPort)
+	address := fmt.Sprintf("localhost:%v", CLIENT_PORT)
 	lis, _ := net.Listen("tcp", address)
 	defer lis.Close()
 
 	grcpServer := grpc.NewServer()
 	Auction.RegisterAuctionServiceServer(grcpServer, feServer)
 	if err := grcpServer.Serve(lis); err != nil {
-		fmt.Printf("Failed to serve AuctionService on port %v\n", ClientPort)
+		fmt.Printf("Failed to serve AuctionService on port %v\n", CLIENT_PORT)
 	}
 }
 
 // connect to a replica with at max 3 retries
 func ConnectToReplicaClient(conn *grpc.ClientConn) (Replica.ReplicaServiceClient, string) {
 	ctx := context.Background()
-	var client Replica.ReplicaServiceClient
-	request := Replica.GetStatusRequest{ServerId: int32(-1)}
-	client = Replica.NewReplicaServiceClient(conn)
-	ack, err := client.CheckStatus(ctx, &request)
-	if err != nil || ack.GetServerId() < 0 {
+
+	client := Replica.NewReplicaServiceClient(conn)
+	ack, err := client.CheckStatus(ctx, &Replica.EmptyRequest{})
+	if err != nil || ack.GetMsg() == "" {
 		return client, "failed"
 	}
 

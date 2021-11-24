@@ -1,15 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
-)
+	"time"
 
-const (
-	ServerPort    = 5000
-	ServerLogFile = "serverLog"
-	ConnectionNil = "TRANSIENT_FAILURE" // instead of nil when trying to connect to a port without a ReplicaService registered
+	"github.com/lottejd/DISYSMP3/Replica"
+	"google.golang.org/grpc"
 )
 
 func Logger(message string, logFileName string) {
@@ -36,5 +35,37 @@ func FormatAddress(port int32) string {
 }
 
 func (s *Server) ToString() string {
-	return fmt.Sprintf("Server id: %v, server port: %v, server is primary: %v,  server alive: %v,", s.id, s.port)
+	return fmt.Sprintf("Server id: %v, server port: %v", s.id, s.port)
+}
+
+// connect to a replica with at max 3 retries
+func ConnectToReplicaClient(conn *grpc.ClientConn) (Replica.ReplicaServiceClient, string) {
+	ctx := context.Background()
+	
+	client := Replica.NewReplicaServiceClient(conn)
+	ack, err := client.CheckStatus(ctx, &Replica.EmptyRequest{})
+	if err != nil || ack.GetServerId() < 0 {
+		return client, "failed"
+	}
+
+	ctx.Done()
+	return client, "succes"
+}
+
+// connect to address
+func Connect(port int) (*grpc.ClientConn, string) {
+	address := fmt.Sprintf("localhost:%v", port)
+	var status string
+	var conn *grpc.ClientConn
+	for i := 0; i < 3; i++ {
+		conn, err := grpc.Dial(address, grpc.WithInsecure())
+		if err != nil {
+			status = "failed"
+			time.Sleep(time.Millisecond * 250)
+			continue
+		} else {
+			return conn, "succes"
+		}
+	}
+	return conn, status
 }
