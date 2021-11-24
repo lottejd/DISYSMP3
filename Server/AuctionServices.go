@@ -63,21 +63,4 @@ func (s *Server) UpdateAllReplicaLogs(bid int32, bidId int32) string {
 	return "failed"
 }
 
-// connect to a replica with at max 3 retries
-func ConnectToReplicaClient(port int32) (Replica.ReplicaServiceClient, string) {
-	var status string
-	var client Replica.ReplicaServiceClient
-	status = "failed"
-	for i := 0; i < 3; i++ {
-		_, conn := Connect(port)
-		if conn == nil {
-			time.Sleep(time.Millisecond * 250)
-			continue
-		}
-		client = Replica.NewReplicaServiceClient(conn)
-		status = "succes"
-		break
-	}
 
-	return client, status
-}

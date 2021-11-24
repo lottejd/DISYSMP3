@@ -14,17 +14,10 @@ import (
 )
 
 const (
-	ClientPort    = 8080
 	ServerPort    = 5000
 	ServerLogFile = "serverLog"
 	ConnectionNil = "TRANSIENT_FAILURE" // instead of nil when trying to connect to a port without a ReplicaService registered
 )
-
-type AuctionType struct {
-	highestBid    int32
-	highestBidder int32
-	done          bool
-}
 
 func CloseConnectionAndCtx(ctx context.Context, conn *grpc.ClientConn) {
 	conn.Close()

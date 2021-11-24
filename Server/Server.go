@@ -8,23 +8,19 @@ import (
 	"time"
 
 	"github.com/hpcloud/tail"
-	"github.com/lottejd/DISYSMP3/Auction"
 	"github.com/lottejd/DISYSMP3/Replica"
 	"google.golang.org/grpc"
 )
 
 type Server struct {
 	Replica.UnimplementedReplicaServiceServer
-	Auction.UnimplementedAuctionServiceServer
 	id             int32
 	primary        bool
 	port           int32
 	allServers     map[int32]Server
 	alive          bool
 	isPrimaryDead  chan bool
-	this           *AuctionType
 	replicaService Service
-	auctionService Service
 }
 
 func main() {
@@ -44,7 +40,6 @@ func main() {
 
 	if server.primary {
 		server.allServers[server.id] = server
-		go StartAuctionService(&server)
 		go server.PrimaryReplicaLoop()
 	} else {
 		go server.ReplicaLoop()
@@ -62,7 +57,6 @@ func main() {
 					server.SetPrimary()
 					server.port = ServerPort
 					go StartReplicaService(ServerPort, &server)
-					go StartAuctionService(&server)
 					go server.PrimaryReplicaLoop()
 					break
 				}
@@ -83,8 +77,6 @@ func main() {
 func (s *Server) PrimaryReplicaLoop() {
 	var KillThisServer bool
 	fmt.Printf("New primary id: %v\n", s.id)
-	// tilføj logic hvis der allerede er en auction forsæt på den
-	// hent sidste bud fra log
 	t, err := tail.TailFile(ServerLogFile+strconv.Itoa(int(s.id)), tail.Config{Follow: true})
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
@@ -117,7 +109,6 @@ func (s *Server) PrimaryReplicaLoop() {
 		temp := <-s.isPrimaryDead
 		println("Primary should die")
 		KillThisServer = temp
-		s.auctionService.lis.Close()
 	}
 }
 
@@ -240,9 +231,8 @@ func CreateReplica(conn *grpc.ClientConn) Server {
 		port = replicaInfo.GetPort()
 	}
 
-	CloseConnectionAndCtx(ctx, conn)
-	auction := AuctionType{0, -1, false}                                                                   // fjern denne type auction køre gennemm log
-	s := Server{id: id, primary: primary, port: port, allServers: allServers, alive: true, this: &auction} //arbiter: sync.Mutex{}
+	CloseConnectionAndCtx(ctx, conn)                                                       // fjern denne type auction køre gennemm log
+	s := Server{id: id, primary: primary, port: port, allServers: allServers, alive: true} //arbiter: sync.Mutex{}
 	s.AddReplicaToMap(&s)
 	return s
 }
