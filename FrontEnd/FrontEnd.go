@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hpcloud/tail"
@@ -84,12 +86,42 @@ func (feServer *FrontEndServer) UpdateBid(bid int32, bidderId int32) {
 	fmt.Println(msg)
 }
 
+func (feServer *FrontEndServer) CreateAuction(logMsg string) (AuctionType, int) {
+	splitMsg := strings.Fields(logMsg)
+	var bid, bidder, replicaPort int
+	for i, subMsg := range splitMsg {
+		switch subMsg {
+		case "HighestBid:":
+			fmt.Println(splitMsg[i+1])
+			bid, _ = strconv.Atoi(splitMsg[i+1])
+		case "id:":
+			fmt.Println(splitMsg[i+1])
+			bidder, _ = strconv.Atoi(splitMsg[i+1])
+		case "port:":
+			fmt.Println(splitMsg[i+1])
+			replicaPort, _ = strconv.Atoi(splitMsg[i+1])
+			break
+		}
+	}
+	return AuctionType{Bid: int32(bid), Bidder: int32(bidder), done: feServer.EvalAuctionStillGoing(time.Now())}, replicaPort
+}
+
 func (feServer *FrontEndServer) GetHighestBidFromReplicas() (AuctionType, string) {
 	// implement
-	latestLog := feServer.ReadFromLog()
-	for _, Msg := range latestLog {
-		fmt.Println(Msg)
+	latestLogs := feServer.ReadFromLog()
+	latestAuctionsFromLogs := make([]AuctionType, 10)
+	for _, Msg := range latestLogs {
+		auction, replicaPort := feServer.CreateAuction(Msg)
+		latestAuctionsFromLogs = append(latestAuctionsFromLogs, auction)
+		fmt.Println(replicaPort)
 	}
+
+	// splitLatestMsg := strings.Fields(latestLogs[len(latestLogs)-1])
+	for _, auctions := range latestAuctionsFromLogs {
+		fmt.Println(auctions)
+	}
+	fmt.Println(len(latestAuctionsFromLogs))
+
 	// get bid from all replicas maybe use timestamps or just r = w = n-1/2
 	// the value repeating the most or quorum wins
 	return *feServer.this, "succesfully got the bid from client"
@@ -110,13 +142,13 @@ func (feServer *FrontEndServer) ReadFromLog() []string {
 			}
 
 			var latestMsg string
-			go t.StopAtEOF()
+			go t.StopAtEOF() // stop after last line has been read
 
 			for line := range t.Lines {
 				latestMsg = line.Text
 			}
-			fmt.Println(latestMsg)
-			replicaMsgs = append(replicaMsgs, latestMsg)
+			latestMsgAndPort := fmt.Sprintf("%s  replica port: %v", latestMsg, replica)
+			replicaMsgs = append(replicaMsgs, latestMsgAndPort)
 		}
 	}
 	return replicaMsgs
@@ -175,7 +207,9 @@ func (feServer *FrontEndServer) FindReplicasAndAddThemToMap() {
 }
 
 func (feServer *FrontEndServer) EvalAuctionStillGoing(current time.Time) bool {
-	fmt.Println(feServer.startTime)
+
+	fmt.Println(feServer.startTime.Format(time.Layout))
+	fmt.Println(current.Format(time.Layout))
 	return true // implement
 }
 
