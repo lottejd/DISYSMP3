@@ -111,7 +111,7 @@ func (feServer *FrontEndServer) UpdateAllReplicas(auction AuctionType) string {
 
 func (feServer *FrontEndServer) EvalAuctionStillGoing(current time.Time) bool {
 	fmt.Println(feServer.startTime)
-	return true
+	return true // implement
 }
 
 // grcp server setup

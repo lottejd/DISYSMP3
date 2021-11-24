@@ -4,45 +4,27 @@ package Replica;
 option go_package = "./Replica";
 
 service ReplicaService{
-    rpc CheckStatus (getStatusRequest) returns (statusResponse);
-    rpc CreateNewReplica (emptyRequest) returns (replicaInfo);
-    rpc WriteToLog (auction) returns (ack);
-    rpc Election (ElectionMessage) returns (Answer);
-    rpc KillPrimary (emptyRequest) returns (Answer);
+    rpc CheckStatus (EmptyRequest) returns (StatusResponse);
+    rpc WriteToLog (Auction) returns (AuctionAck);
+    // muligvis add en killserver() for at kunne test
 }
 
-message ElectionMessage{
-    int32 serverId = 1;
+
+message EmptyRequest{}
+
+message AuctionAck {  
+    Auction bid = 1;
     string msg = 2;
+    // timestamp pls
 }
 
-message Answer{
-    int32 serverId = 1;
-    bool alive = 2; // maybe remove since getting an Answer implies alive
-}
-
-
-message emptyRequest{}
-
-message ack {  
-     string ack = 1;
-}
-
-message auction {
+message Auction {
     int32 bid = 1 ;
     int32 bidId = 2; 
-    //timestamp pls
+    // timestamp pls
 }
 
-message getStatusRequest {
+message StatusResponse{
     int32 serverId = 1;
-}
-message statusResponse{
-    int32 serverId = 1;
-    bool primary = 2;
-}
-
-message replicaInfo{
-    int32 serverId = 1;
-    int32 port = 2;
+    string msg = 2;
 }
