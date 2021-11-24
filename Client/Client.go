@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"math/rand"
 	"strconv"
 
 	"github.com/lottejd/DISYSMP3/Auction"
@@ -31,7 +30,11 @@ func main() {
 	defer conn.Close()
 
 	// create client
-	user := User{userId: rand.Int31n(9001)}
+	var id int32
+
+	fmt.Println("Choose an integer as id:")
+	fmt.Scanln(&id)
+	user := User{userId: int32(id)}
 	client := Auction.NewAuctionServiceClient(conn)
 
 	go user.listenForInput(client, ctx)
