@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/rand"
 	"strconv"
 
 	"github.com/lottejd/DISYSMP3/Auction"
@@ -15,9 +16,9 @@ const (
 	logFileName = "logfile"
 )
 
-var (
-	clientID int32
-)
+type User struct {
+	userId int32
+}
 
 func main() {
 	// init
@@ -30,17 +31,18 @@ func main() {
 	defer conn.Close()
 
 	// create client
+	user := User{userId: rand.Int31n(9001)}
 	client := Auction.NewAuctionServiceClient(conn)
 
-	go listenForInput(client, ctx)
+	go user.listenForInput(client, ctx)
 
 	for {
 	}
 }
 
 // client side
-func Bid(client Auction.AuctionServiceClient, ctx context.Context, amount int32) {
-	request := &Auction.BidRequest{Amount: amount, ClientId: clientID}
+func (u *User) Bid(client Auction.AuctionServiceClient, ctx context.Context, amount int32) {
+	request := &Auction.BidRequest{Amount: amount, ClientId: u.userId}
 	response, err := client.Bid(ctx, request)
 	if response.Success {
 		fmt.Println("Bid was successful")
@@ -51,7 +53,7 @@ func Bid(client Auction.AuctionServiceClient, ctx context.Context, amount int32)
 	}
 }
 
-func Result(client Auction.AuctionServiceClient, ctx context.Context) {
+func (u *User) Result(client Auction.AuctionServiceClient, ctx context.Context) {
 	request := &Auction.ResultRequest{}
 	response, err := client.Result(ctx, request)
 	if response.Done {
@@ -64,7 +66,7 @@ func Result(client Auction.AuctionServiceClient, ctx context.Context) {
 
 }
 
-func listenForInput(client Auction.AuctionServiceClient, ctx context.Context) {
+func (u *User) listenForInput(client Auction.AuctionServiceClient, ctx context.Context) {
 	for {
 		var input string
 		fmt.Scanln(&input)
@@ -77,18 +79,17 @@ func listenForInput(client Auction.AuctionServiceClient, ctx context.Context) {
 				if err != nil {
 					fmt.Errorf("Error: %v", err)
 				} else {
-					Bid(client, ctx, int32(bid))
+					u.Bid(client, ctx, int32(bid))
 				}
 				break
 
 			case "result":
-				Result(client, ctx)
+				u.Result(client, ctx)
 				break
 			}
 		}
 	}
 }
-
 
 // below is not used
 //*Auction.AuctionServiceClient implement
