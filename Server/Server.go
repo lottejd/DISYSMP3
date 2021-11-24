@@ -27,7 +27,7 @@ func main() {
 
 	//init
 	freeServerPort := FindFreePort()
-	fmt.Printf("The next free server port is: %v", freeServerPort)
+	fmt.Printf("The next free server port is: %v\n", freeServerPort)
 	server := CreateReplica(freeServerPort)
 
 	//setup listen on port

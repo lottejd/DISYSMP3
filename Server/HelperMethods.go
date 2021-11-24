@@ -12,6 +12,7 @@ import (
 )
 
 func Logger(message string, logFileName string) {
+	// path, err := os.Create(filepath.Joi)
 	f, err := os.OpenFile(logFileName, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatalf("error opening file: %v", err)
@@ -41,7 +42,7 @@ func (s *Server) ToString() string {
 // connect to a replica with at max 3 retries
 func ConnectToReplicaClient(conn *grpc.ClientConn) (Replica.ReplicaServiceClient, string) {
 	ctx := context.Background()
-	
+
 	client := Replica.NewReplicaServiceClient(conn)
 	ack, err := client.CheckStatus(ctx, &Replica.EmptyRequest{})
 	if err != nil || ack.GetServerId() < 0 {

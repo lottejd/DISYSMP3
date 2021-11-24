@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"time"
 
+	"github.com/hpcloud/tail"
 	"github.com/lottejd/DISYSMP3/Auction"
 	"github.com/lottejd/DISYSMP3/Replica"
 	"google.golang.org/grpc"
@@ -15,6 +17,7 @@ import (
 const (
 	CLIENT_PORT             = 8080
 	SERVER_PORT             = 5000
+	SERVER_LOG_FILE         = "serverLog"
 	REPLICA_STATUS_RESPONSE = "Alive and well"
 )
 
@@ -36,11 +39,11 @@ func main() {
 	replicaServerMap := make(map[int]bool)
 	startTime := time.Now()
 	feServer := FrontEndServer{this: &proxyAuction, startTime: &startTime, replicaServerPorts: replicaServerMap}
-	go feServer.FindReplicasAndAddThemToMap()
-	listen(&feServer)
 
-	fmt.Scanln()
-	fmt.Println("Main FrontEnd is now Done")
+	go listen(&feServer)
+	for {
+		feServer.FindReplicasAndAddThemToMap()
+	}
 }
 
 func (feServer *FrontEndServer) Bid(ctx context.Context, message *Auction.BidRequest) (*Auction.BidResponse, error) {
@@ -83,13 +86,44 @@ func (feServer *FrontEndServer) UpdateBid(bid int32, bidderId int32) {
 
 func (feServer *FrontEndServer) GetHighestBidFromReplicas() (AuctionType, string) {
 	// implement
+	latestLog := feServer.ReadFromLog()
+	for _, Msg := range latestLog {
+		fmt.Println(Msg)
+	}
 	// get bid from all replicas maybe use timestamps or just r = w = n-1/2
 	// the value repeating the most or quorum wins
 	return *feServer.this, "succesfully got the bid from client"
 }
 
+func (feServer *FrontEndServer) ReadFromLog() []string {
+	replicaMsgs := make([]string, len(feServer.replicaServerPorts))
+	err := os.Chdir("../Server") // læs fra server directory
+	if err != nil {
+		fmt.Println(err)
+	}
+	for replica, alive := range feServer.replicaServerPorts {
+		if alive {
+			t, err := tail.TailFile(fmt.Sprintf("%s%v", SERVER_LOG_FILE, replica), tail.Config{Follow: true})
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+
+			}
+
+			var latestMsg string
+			go t.StopAtEOF()
+
+			for line := range t.Lines {
+				latestMsg = line.Text
+			}
+			fmt.Println(latestMsg)
+			replicaMsgs = append(replicaMsgs, latestMsg)
+		}
+	}
+	return replicaMsgs
+
+}
+
 func (feServer *FrontEndServer) UpdateAllReplicas(auction AuctionType) string {
-	// implement
 	var failedWrites int
 	ctx := context.Background()
 	request := Replica.Auction{Bid: auction.Bid, BidId: auction.Bidder}
@@ -132,7 +166,7 @@ func (feServer *FrontEndServer) FindReplicasAndAddThemToMap() {
 				feServer.replicaServerPorts[port] = false
 			} else if response.GetMsg() == REPLICA_STATUS_RESPONSE {
 				feServer.replicaServerPorts[port] = true
-				fmt.Printf("found port: %v\n", port)
+				// fmt.Printf("found port: %v\n", port)
 			}
 		}
 		counter++
