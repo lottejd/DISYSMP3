@@ -73,7 +73,7 @@ func (s *Server) CheckStatus(ctx context.Context, empty *Replica.EmptyRequest) (
 
 // gRPC services
 func (s *Server) WriteToLog(ctx context.Context, auction *Replica.Auction) (*Replica.AuctionAck, error) {
-	msg := fmt.Sprintf("HighestBid: %v, placed by: %v", auction.Bid, auction.BidId)
+	msg := fmt.Sprintf("HighestBid: %v placed by id: %v", auction.Bid, auction.BidId)
 	Logger(msg, fmt.Sprintf("%s%v", SERVER_LOG_FILE, s.port))
 	fmt.Println(msg)
 	return &Replica.AuctionAck{Bid: auction, Msg: "ack"}, nil
