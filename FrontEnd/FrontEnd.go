@@ -102,14 +102,11 @@ func (feServer *FrontEndServer) CreateAuctionFromLog(logMsg string) AuctionFromL
 			bidder, _ = strconv.Atoi(splitMsg[i+1])
 		case "port:":
 			replicaPort, _ = strconv.Atoi(splitMsg[i+1])
-			break
 		}
 	}
 	auction := AuctionType{Bid: int32(bid), Bidder: int32(bidder), done: feServer.EvalAuctionDone(time.Now())}
 	return AuctionFromLog{latestAuction: auction, replicaPort: int32(replicaPort)}
 }
-
-
 
 func (feServer *FrontEndServer) GetHighestBidFromReplicas() (AuctionType, string) {
 	// implement
@@ -130,7 +127,7 @@ func (feServer *FrontEndServer) GetHighestBidFromReplicas() (AuctionType, string
 			fmt.Println(auctions)
 		}
 	}
-	return *feServer.this, "succesfully got the bid from client"
+	return *feServer.this, "succesfully got the bid from client" // replicas
 }
 
 func (feServer *FrontEndServer) ReadFromLog() []string {
@@ -161,7 +158,7 @@ func (feServer *FrontEndServer) ReadFromLog() []string {
 }
 
 func (feServer *FrontEndServer) UpdateAllReplicas(auction AuctionType) string {
-	var failedWrites int
+	failedWrites := 0
 	ctx := context.Background()
 	request := Replica.Auction{Bid: auction.Bid, BidId: auction.Bidder}
 
@@ -173,14 +170,15 @@ func (feServer *FrontEndServer) UpdateAllReplicas(auction AuctionType) string {
 				response, err := replicaClient.WriteToLog(ctx, &request)
 				if err != nil {
 					fmt.Println(err.Error())
-				} else if response.GetMsg() != "succes" || status == "failed" {
+				} else if response.GetMsg() != "ack" || status == "failed" {
 					failedWrites++
 				}
 				conn.Close()
 			}
 		}
 	}
-	if failedWrites/2 < len(feServer.replicaServerPorts) {
+	fmt.Println(failedWrites)
+	if failedWrites < len(feServer.replicaServerPorts)/2 {
 		return "succesfully updated replica logs"
 	}
 	return "failed to update more than half of the replicas"
