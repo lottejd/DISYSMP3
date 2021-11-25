@@ -37,36 +37,37 @@ func main() {
 	user := User{userId: int32(id)}
 	client := Auction.NewAuctionServiceClient(conn)
 
-	go user.listenForInput(client, ctx)
-
-	for {
-	}
+	user.listenForInput(client, ctx)
 }
 
 // client side
-func (u *User) Bid(client Auction.AuctionServiceClient, ctx context.Context, amount int32) {
+func (u *User) Bid(client Auction.AuctionServiceClient, ctx context.Context, amount int32) string {
 	request := &Auction.BidRequest{Amount: amount, ClientId: u.userId}
 	response, err := client.Bid(ctx, request)
+	var reply string
 	if response.Success {
-		fmt.Println("Bid was successful")
+		reply = "Bid was successful"
 	} else if err != nil {
 		fmt.Errorf(err.Error())
 	} else {
-		fmt.Println("Bid was not successful. Check if your bid was an int, and higher than the current bid")
+		reply = "Bid was not successful. Check if your bid was an int, and higher than the current bid"
 	}
+	return reply
 }
 
-func (u *User) Result(client Auction.AuctionServiceClient, ctx context.Context) {
+func (u *User) Result(client Auction.AuctionServiceClient, ctx context.Context) string {
 	request := &Auction.ResultRequest{}
 	response, err := client.Result(ctx, request)
+	var reply string
 	if response.GetDone() {
-		fmt.Printf("The auction is finished. Bidder with id: %v won the auction, with bid: %v", response.GetBidderID(), response.GetHighestBid())
+		reply = fmt.Sprintf("The auction is finished. Bidder with id: %v won the auction, with bid: %v", response.GetBidderID(), response.GetHighestBid())
 	} else if err == nil {
-		fmt.Printf("The auction is still going. Current highest bid comes from bidder: %v, who is bidding: %v", response.GetBidderID(), response.GetHighestBid())
+		reply = fmt.Sprintf("The auction is still going. Current highest bid comes from bidder: %v, who is bidding: %v", response.GetBidderID(), response.GetHighestBid())
 	} else {
 		fmt.Errorf(err.Error())
+		reply = "There has been no bids yet"
 	}
-
+	return reply
 }
 
 func (u *User) listenForInput(client Auction.AuctionServiceClient, ctx context.Context) {
@@ -82,47 +83,14 @@ func (u *User) listenForInput(client Auction.AuctionServiceClient, ctx context.C
 				if err != nil {
 					fmt.Errorf("Error: %v", err)
 				} else {
-					u.Bid(client, ctx, int32(bid))
+					fmt.Println(u.Bid(client, ctx, int32(bid)))
 				}
 				break
 
 			case "result":
-				u.Result(client, ctx)
+				fmt.Println(u.Result(client, ctx))
 				break
 			}
 		}
 	}
-}
-
-// below is not used
-//*Auction.AuctionServiceClient implement
-func reconnect(client Auction.AuctionServiceClient) {
-	var tempConnected bool
-	var temp Auction.AuctionServiceClient
-	for !tempConnected {
-		temp, IsConnected := ConnectAsAuctionClient()
-		tempConnected = IsConnected
-		client = temp
-	}
-	client = temp
-}
-
-func ConnectAsAuctionClient() (Auction.AuctionServiceClient, bool) {
-	conn, err := grpc.Dial(ADDRESS, grpc.WithInsecure(), grpc.WithBlock())
-	if err != nil {
-		log.Fatalf("did not connect: %v", err)
-	}
-	defer conn.Close()
-
-	// create client
-	var client Auction.AuctionServiceClient
-	IsConnected := false
-	client = Auction.NewAuctionServiceClient(conn)
-	request := Auction.ResultRequest{}
-	response, err := client.Result(context.Background(), &request)
-	if err != nil {
-		response.Reset() // idk man need to use this variable and cant set it to  _, err := client.REsult(sad)
-		IsConnected = true
-	}
-	return client, IsConnected
 }
