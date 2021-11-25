@@ -1,6 +1,6 @@
 # DISYSMP3
 # How to run 
-* start 2 or more Servers up to 10 from /Server go run .
+* start 1 or more Servers up to 10 from /Server go run .
 * start 1 front end from /FrontEnd go run . 
 * start 1 or more clients from /Client go run .
     * client CLI commands
@@ -8,6 +8,7 @@
     * "result" prints the highest bid and bidder
 
 # Be aware 
+* The majority of replicas alive need to agree on the same bid for the "result" method to work as intended. If not result will reply "no accepted bid" 
 * The auction ends 3 minutes after the front end starts 
 * restarting the front end restarts the auction timer, but doesn't clear the logs
 * previous logs will be included when front end starts, so delete these before starting a new auction   
