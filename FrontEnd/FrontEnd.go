@@ -29,6 +29,11 @@ type AuctionType struct {
 	done   bool
 }
 
+type AuctionFromLog struct {
+	latestAuction AuctionType
+	replicaPort   int32
+}
+
 type FrontEndServer struct {
 	Auction.UnimplementedAuctionServiceServer
 	this               *AuctionType
@@ -53,7 +58,7 @@ func (feServer *FrontEndServer) Bid(ctx context.Context, message *Auction.BidReq
 	fmt.Println(status)
 
 	newBid := message.GetAmount()
-	if currentBid.Bid < newBid && feServer.EvalAuctionDone(time.Now()) {
+	if currentBid.Bid < newBid && !feServer.EvalAuctionDone(time.Now()) {
 		feServer.UpdateBid(newBid, message.GetClientId())
 		return &Auction.BidResponse{Success: true}, nil
 	}
@@ -104,13 +109,12 @@ func (feServer *FrontEndServer) CreateAuctionFromLog(logMsg string) AuctionFromL
 	return AuctionFromLog{latestAuction: auction, replicaPort: int32(replicaPort)}
 }
 
-type AuctionFromLog struct {
-	latestAuction AuctionType
-	replicaPort   int32
-}
+
 
 func (feServer *FrontEndServer) GetHighestBidFromReplicas() (AuctionType, string) {
 	// implement
+	// get bid from all replicas maybe use timestamps or just r = w = n-1/2
+	// the value repeating the most or quorum wins
 	latestLogs := feServer.ReadFromLog()
 	latestAuctionsFromLogs := make([]AuctionFromLog, 10)
 	for _, Msg := range latestLogs {
@@ -126,9 +130,6 @@ func (feServer *FrontEndServer) GetHighestBidFromReplicas() (AuctionType, string
 			fmt.Println(auctions)
 		}
 	}
-
-	// get bid from all replicas maybe use timestamps or just r = w = n-1/2
-	// the value repeating the most or quorum wins
 	return *feServer.this, "succesfully got the bid from client"
 }
 
@@ -140,10 +141,9 @@ func (feServer *FrontEndServer) ReadFromLog() []string {
 	}
 	for replica, alive := range feServer.replicaServerPorts {
 		if alive {
-			t, err := tail.TailFile(fmt.Sprintf("%s%v", SERVER_LOG_FILE, replica), tail.Config{Follow: true})
+			t, err := tail.TailFile(fmt.Sprintf("%s%v", SERVER_LOG_FILE, replica), tail.Config{MustExist: true, Follow: true})
 			if err != nil {
-				fmt.Printf("Error: %v\n", err)
-
+				return replicaMsgs
 			}
 
 			var latestMsg string
