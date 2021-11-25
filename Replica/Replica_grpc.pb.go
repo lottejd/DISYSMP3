@@ -18,11 +18,8 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ReplicaServiceClient interface {
-	CheckStatus(ctx context.Context, in *GetStatusRequest, opts ...grpc.CallOption) (*StatusResponse, error)
-	CreateNewReplica(ctx context.Context, in *EmptyRequest, opts ...grpc.CallOption) (*ReplicaInfo, error)
-	WriteToLog(ctx context.Context, in *Auction, opts ...grpc.CallOption) (*Ack, error)
-	Election(ctx context.Context, in *ElectionMessage, opts ...grpc.CallOption) (*Answer, error)
-	KillPrimary(ctx context.Context, in *EmptyRequest, opts ...grpc.CallOption) (*Answer, error)
+	CheckStatus(ctx context.Context, in *EmptyRequest, opts ...grpc.CallOption) (*StatusResponse, error)
+	WriteToLog(ctx context.Context, in *Auction, opts ...grpc.CallOption) (*AuctionAck, error)
 }
 
 type replicaServiceClient struct {
@@ -33,7 +30,7 @@ func NewReplicaServiceClient(cc grpc.ClientConnInterface) ReplicaServiceClient {
 	return &replicaServiceClient{cc}
 }
 
-func (c *replicaServiceClient) CheckStatus(ctx context.Context, in *GetStatusRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
+func (c *replicaServiceClient) CheckStatus(ctx context.Context, in *EmptyRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
 	out := new(StatusResponse)
 	err := c.cc.Invoke(ctx, "/Replica.ReplicaService/CheckStatus", in, out, opts...)
 	if err != nil {
@@ -42,36 +39,9 @@ func (c *replicaServiceClient) CheckStatus(ctx context.Context, in *GetStatusReq
 	return out, nil
 }
 
-func (c *replicaServiceClient) CreateNewReplica(ctx context.Context, in *EmptyRequest, opts ...grpc.CallOption) (*ReplicaInfo, error) {
-	out := new(ReplicaInfo)
-	err := c.cc.Invoke(ctx, "/Replica.ReplicaService/CreateNewReplica", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *replicaServiceClient) WriteToLog(ctx context.Context, in *Auction, opts ...grpc.CallOption) (*Ack, error) {
-	out := new(Ack)
+func (c *replicaServiceClient) WriteToLog(ctx context.Context, in *Auction, opts ...grpc.CallOption) (*AuctionAck, error) {
+	out := new(AuctionAck)
 	err := c.cc.Invoke(ctx, "/Replica.ReplicaService/WriteToLog", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *replicaServiceClient) Election(ctx context.Context, in *ElectionMessage, opts ...grpc.CallOption) (*Answer, error) {
-	out := new(Answer)
-	err := c.cc.Invoke(ctx, "/Replica.ReplicaService/Election", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *replicaServiceClient) KillPrimary(ctx context.Context, in *EmptyRequest, opts ...grpc.CallOption) (*Answer, error) {
-	out := new(Answer)
-	err := c.cc.Invoke(ctx, "/Replica.ReplicaService/KillPrimary", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -82,11 +52,8 @@ func (c *replicaServiceClient) KillPrimary(ctx context.Context, in *EmptyRequest
 // All implementations must embed UnimplementedReplicaServiceServer
 // for forward compatibility
 type ReplicaServiceServer interface {
-	CheckStatus(context.Context, *GetStatusRequest) (*StatusResponse, error)
-	CreateNewReplica(context.Context, *EmptyRequest) (*ReplicaInfo, error)
-	WriteToLog(context.Context, *Auction) (*Ack, error)
-	Election(context.Context, *ElectionMessage) (*Answer, error)
-	KillPrimary(context.Context, *EmptyRequest) (*Answer, error)
+	CheckStatus(context.Context, *EmptyRequest) (*StatusResponse, error)
+	WriteToLog(context.Context, *Auction) (*AuctionAck, error)
 	mustEmbedUnimplementedReplicaServiceServer()
 }
 
@@ -94,20 +61,11 @@ type ReplicaServiceServer interface {
 type UnimplementedReplicaServiceServer struct {
 }
 
-func (UnimplementedReplicaServiceServer) CheckStatus(context.Context, *GetStatusRequest) (*StatusResponse, error) {
+func (UnimplementedReplicaServiceServer) CheckStatus(context.Context, *EmptyRequest) (*StatusResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CheckStatus not implemented")
 }
-func (UnimplementedReplicaServiceServer) CreateNewReplica(context.Context, *EmptyRequest) (*ReplicaInfo, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CreateNewReplica not implemented")
-}
-func (UnimplementedReplicaServiceServer) WriteToLog(context.Context, *Auction) (*Ack, error) {
+func (UnimplementedReplicaServiceServer) WriteToLog(context.Context, *Auction) (*AuctionAck, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method WriteToLog not implemented")
-}
-func (UnimplementedReplicaServiceServer) Election(context.Context, *ElectionMessage) (*Answer, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Election not implemented")
-}
-func (UnimplementedReplicaServiceServer) KillPrimary(context.Context, *EmptyRequest) (*Answer, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method KillPrimary not implemented")
 }
 func (UnimplementedReplicaServiceServer) mustEmbedUnimplementedReplicaServiceServer() {}
 
@@ -123,7 +81,7 @@ func RegisterReplicaServiceServer(s grpc.ServiceRegistrar, srv ReplicaServiceSer
 }
 
 func _ReplicaService_CheckStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetStatusRequest)
+	in := new(EmptyRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -135,25 +93,7 @@ func _ReplicaService_CheckStatus_Handler(srv interface{}, ctx context.Context, d
 		FullMethod: "/Replica.ReplicaService/CheckStatus",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ReplicaServiceServer).CheckStatus(ctx, req.(*GetStatusRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ReplicaService_CreateNewReplica_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(EmptyRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ReplicaServiceServer).CreateNewReplica(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/Replica.ReplicaService/CreateNewReplica",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ReplicaServiceServer).CreateNewReplica(ctx, req.(*EmptyRequest))
+		return srv.(ReplicaServiceServer).CheckStatus(ctx, req.(*EmptyRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -176,42 +116,6 @@ func _ReplicaService_WriteToLog_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ReplicaService_Election_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ElectionMessage)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ReplicaServiceServer).Election(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/Replica.ReplicaService/Election",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ReplicaServiceServer).Election(ctx, req.(*ElectionMessage))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ReplicaService_KillPrimary_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(EmptyRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ReplicaServiceServer).KillPrimary(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/Replica.ReplicaService/KillPrimary",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ReplicaServiceServer).KillPrimary(ctx, req.(*EmptyRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // ReplicaService_ServiceDesc is the grpc.ServiceDesc for ReplicaService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -224,20 +128,8 @@ var ReplicaService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ReplicaService_CheckStatus_Handler,
 		},
 		{
-			MethodName: "CreateNewReplica",
-			Handler:    _ReplicaService_CreateNewReplica_Handler,
-		},
-		{
 			MethodName: "WriteToLog",
 			Handler:    _ReplicaService_WriteToLog_Handler,
-		},
-		{
-			MethodName: "Election",
-			Handler:    _ReplicaService_Election_Handler,
-		},
-		{
-			MethodName: "KillPrimary",
-			Handler:    _ReplicaService_KillPrimary_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

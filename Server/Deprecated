@@ -1,0 +1,374 @@
+package main
+
+import (
+	"bufio"
+	"context"
+	"fmt"
+	"net"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/lottejd/DISYSMP3/Auction"
+	"github.com/lottejd/DISYSMP3/Replica"
+	"google.golang.org/grpc"
+)
+
+func Max(this int32, that int32) int32 {
+	if this < that {
+		return that
+	}
+	return this
+}
+
+func (s *Server) ToString() string {
+	return fmt.Sprintf("Server id: %v, server port: %v", s.id, s.port)
+}
+
+// read from log
+t, err := tail.TailFile(ServerLogFile+strconv.Itoa(int(s.id)), tail.Config{Follow: true})
+if err != nil {
+	fmt.Printf("Error: %v\n", err)
+}
+var latestBid string
+fmt.Println(t.Filename)
+fmt.Println(latestBid)
+for line := range t.Lines {
+	latestBid = line.Text
+}
+fmt.Println(latestBid)
+if latestBid != "" {
+	split := strings.Fields(latestBid)
+	bid, _ := strconv.Atoi(split[3])
+	bidder, _ := strconv.Atoi(split[6])
+	fmt.Println(split[3])
+	s.this.highestBid = int32(bid)
+	s.this.highestBidder = int32(bidder)
+} else {
+	//gør noget med seneste bud
+	go func() {
+		fmt.Println("starting auction")
+		s.StartAuction()
+		time.Sleep(time.Minute * 3)
+		fmt.Println("Ending auction")
+		s.EndAuction()
+	}()
+}
+
+
+
+
+
+func (s *Server) FindServersAndAddToMap(c *Counter) {
+	// add counter *int and bool primarySeen if for 3 rounds primarySeen false start Election
+	var primarySeen bool
+	ctx := context.Background()
+	if c.counter >= 3 {
+		fmt.Println(c.counter)
+		c.counter = 0
+		s.isPrimaryDead <- true
+	}
+	for i := 0; i < 10; i++ {
+		if int(s.id) == i {
+			s.allServers[s.id] = *s
+		} else {
+			serverId, conn := Connect(int32(ServerPort + i))
+			if IsConnectable(conn) {
+				replica := CreateProxyReplica(serverId, int32(ServerPort+i))
+				replicaClient, _ := ConnectToReplicaClient(replica.port)
+
+				request := Replica.GetStatusRequest{ServerId: replica.id}
+				response, _ := replicaClient.CheckStatus(ctx, &request)
+				if response.Primary {
+					primarySeen = true
+					replica.SetPrimary()
+				}
+				s.AddReplicaToMap(replica)
+				conn.Close()
+			} else {
+				// fmt.Printf("removing: %v from the map\n", i)
+				s.RemoveReplicaFromMap(int32(i))
+			}
+		}
+	}
+	if primarySeen || s.primary {
+		c.counter = 0
+	} else {
+		c.counter = c.counter + 1
+	}
+	ctx.Done()
+}
+
+type Counter struct {
+	counter int
+}
+
+
+// create a replicaServer
+func CreateReplica(conn *grpc.ClientConn) Server {
+	var id, port int32
+	client := Replica.NewReplicaServiceClient(conn)
+	ctx := context.Background()
+	replicaInfo, err := client.CreateNewReplica(ctx, &Replica.EmptyRequest{})
+
+	primary := EvalPrimary(conn)
+	allServers := make(map[int32]Server)
+	fmt.Println(IsConnectable(conn))
+	if !IsConnectable(conn) {
+		fmt.Println(err)
+		port = ServerPort
+		id = 0
+	} else {
+		id = replicaInfo.GetServerId()
+		port = replicaInfo.GetPort()
+	}
+
+	CloseConnectionAndCtx(ctx, conn)                                                       // fjern denne type auction køre gennemm log
+	s := Server{id: id, primary: primary, port: port, allServers: allServers, alive: true} //arbiter: sync.Mutex{}
+	s.AddReplicaToMap(&s)
+	return s
+}
+
+// ask leader for info to create a new replica (gRPC)
+func (s *Server) CreateNewReplica(ctx context.Context, emptyRequest *Replica.EmptyRequest) (*Replica.ReplicaInfo, error) {
+	var highestId int32
+	var highestPort int32
+	for _, server := range s.allServers {
+		highestId = Max(highestId, server.id)
+		highestPort = Max(highestPort, server.port)
+	}
+	highestId += 1
+	highestPort += 1
+	response := Replica.ReplicaInfo{ServerId: (highestId), Port: (highestPort)}
+
+	// add new server to map
+	temp := CreateProxyReplica((highestId), (highestPort))
+	s.allServers[highestId] = *temp
+	return &response, nil
+}
+
+
+
+
+
+
+// begin Election bully style
+func (s *Server) StartElection() string {
+	msg := Replica.ElectionMessage{ServerId: s.id, Msg: "Election"}
+	ctx, cancelCtx := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancelCtx()
+	for _, server := range s.allServers {
+		if s.id < server.id {
+			client, ack := ConnectToReplicaClient(server.port)
+			fmt.Print(ack)
+			response, err := client.Election(ctx, &msg)
+			if err != nil {
+				fmt.Println(err.Error())
+				continue
+			}
+			if response.Alive {
+				return "Lost"
+			}
+		}
+	}
+	return "Winner"
+}
+
+
+func (s *Server) KillPrimary(ctx context.Context, empty *Replica.EmptyRequest) (*Replica.Answer, error) {
+	if s.primary {
+		fmt.Printf("I am getting killed %v\n", s.id)
+		s.isPrimaryDead <- true
+		return &Replica.Answer{ServerId: s.id, Alive: false}, nil
+	}
+	return &Replica.Answer{ServerId: s.id, Alive: s.alive}, nil
+}
+
+
+func CreateProxyReplica(id int32, port int32) *Server {
+	tempReplica := Server{id: id, primary: false, port: port, allServers: make(map[int32]Server), alive: true}
+	return &tempReplica
+}
+
+func Print(server *Server) {
+	x := 0
+	c := Counter{counter: x}
+	round := 0
+	for {
+		server.FindServersAndAddToMap(&c)
+		fmt.Printf("Round: %v ", round)
+		round++
+		server.DisplayAllReplicas()
+		time.Sleep(time.Second * 2)
+	}
+}
+
+func (s *Server) DisplayAllReplicas() {
+	fmt.Println("Display All Replicas")
+	for _, server := range s.allServers {
+		fmt.Println(server.ToString())
+	}
+}
+
+func CloseConnectionAndCtx(ctx context.Context, conn *grpc.ClientConn) {
+	conn.Close()
+	ctx.Done()
+}
+
+func (s *Server) Election(ctx context.Context, msg *Replica.ElectionMessage) (*Replica.Answer, error) {
+
+	electionId := msg.GetServerId()
+	if strings.EqualFold("Winner", msg.GetMsg()) && electionId > s.id {
+		temp := s.allServers[electionId]
+		temp.SetPrimary()
+		s.allServers[electionId] = temp
+	}
+	response := Replica.Answer{ServerId: s.id, Alive: s.alive}
+
+	if electionId < s.id {
+		outcome := s.StartElection()
+		if strings.EqualFold(outcome, "Winner") {
+			msg := Replica.ElectionMessage{ServerId: s.id, Msg: "Winner"}
+			ctx, cancelCtx := context.WithTimeout(context.Background(), time.Second*10)
+			defer cancelCtx()
+			for _, server := range s.allServers {
+				client, _ := ConnectToReplicaClient(server.port)
+				response, _ := client.Election(ctx, &msg)
+				if response.GetServerId() < s.id {
+					break
+				}
+			}
+			s.SetPrimary()
+		}
+	}
+	return &response, nil
+}
+
+//server side
+func (s *Server) UpdateAllReplicaLogs(bid int32, bidId int32) string {
+	var succes bool
+	if s.primary {
+		ctx := context.Background()
+		request := Replica.Auction{Bid: bid, BidId: bidId}
+
+		for _, server := range s.allServers {
+			if server.alive {
+				replicaClient, status := ConnectToReplicaClient(server.port)
+				if strings.EqualFold(status, "failed") {
+					server.alive = false
+				} else {
+					ack, _ := replicaClient.WriteToLog(ctx, &request)
+					if strings.EqualFold(ack.GetAck(), "succes") {
+						succes = true
+					}
+				}
+			}
+		}
+	}
+	if succes {
+		return "succes"
+	}
+	return "failed"
+}
+
+// Mark primary as dead in the replica server map
+func (s *Server) KillLeaderLocally() {
+	for _, server := range s.allServers {
+		if server.primary && server.id != s.id {
+			fmt.Println("We reacheached KillLeaderLocally")
+			temp := server
+			temp.alive = false
+			temp.primary = false
+			s.allServers[server.id] = temp
+		}
+	}
+}
+
+func KillPrimaryFromClient(s *Server) {
+	fmt.Println("Sleeping")
+	time.Sleep(time.Second * 10)
+	fmt.Println("Done sleeping")
+	ctx := context.Background()
+	for _, server := range s.allServers {
+		if server.port == s.port {
+			continue
+		}
+		fmt.Printf("Trying to kill: %v\n", server.id)
+		ReplicaClient, ack := ConnectToReplicaClient(server.port)
+		answer, err := ReplicaClient.KillPrimary(ctx, &Replica.EmptyRequest{})
+		if err != nil {
+			fmt.Printf("Couldn't kill: %v", server.id)
+		} else if !answer.Alive {
+			fmt.Printf("%s primary %v reached\n", ack, answer.ServerId)
+		}
+	}
+	ctx.Done()
+}
+
+func waitForInput(s *Server) string {
+	fmt.Printf("Replica ID %v - ", s.id)
+	// to ensure "enter" has been hit before publishing - skud ud til Mie
+	reader, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	// remove newline windows format "\r\n"
+	if err != nil {
+		return "bad input"
+	}
+	input := strings.TrimSuffix(reader, "\r\n")
+	return input
+}
+
+type Service struct {
+	stopService chan bool
+	lis         net.Listener
+}
+
+func (service *Service) Serve() {
+	defer service.lis.Close()
+	for {
+		select {
+		case <-service.stopService:
+			fmt.Printf("Stop listing on port %v", service.lis.Addr())
+			service.lis.Close()
+		default:
+			time.Sleep(time.Second * 1)
+		}
+
+	}
+}
+
+func (s *Server) SetPrimary() {
+	s.primary = true
+}
+
+func (s *Server) AddReplicaToMap(replica *Server) {
+	s.allServers[replica.id] = *replica
+}
+
+func Connect(port int32) (int32, *grpc.ClientConn) {
+	conn, err := grpc.Dial(FormatAddress(port), grpc.WithInsecure())
+	if err != nil {
+		return -1, nil
+	}
+
+	client := Replica.NewReplicaServiceClient(conn)
+
+	request := Replica.GetStatusRequest{ServerId: -1}
+	id, _ := client.CheckStatus(context.Background(), &request)
+	return id.GetServerId(), conn
+}
+
+func StartAuctionService(s *Server) {
+	// stopServiceChan := make(chan bool)
+	lis, _ := net.Listen("tcp", FormatAddress(ClientPort))
+	defer lis.Close()
+
+	// service := Service{stopService: stopServiceChan, lis: lis}
+	// s.auctionService = service
+	// go s.auctionService.Serve()
+
+	grpcServer := grpc.NewServer()
+	Auction.RegisterAuctionServiceServer(grpcServer, s)
+	if err := grpcServer.Serve(lis); err != nil {
+		fmt.Printf("Failed to serve %v on port %v\n", s.id, ClientPort)
+	}
+}

@@ -11,36 +11,41 @@ import (
 )
 
 const (
-	address     = "localhost:8080"
-	logFileName = "logfile"
+	ADDRESS       = "localhost:8080"
+	LOG_FILE_NAME = "logfile"
 )
 
-var (
-	clientID int32
-)
+type User struct {
+	userId int32
+}
 
 func main() {
 	// init
 	// Set up a connection to the server.
 	ctx := context.Background()
-	conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
+	conn, err := grpc.Dial(ADDRESS, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
 	defer conn.Close()
 
 	// create client
+	var id int32
+
+	fmt.Println("Choose an integer as id:")
+	fmt.Scanln(&id)
+	user := User{userId: int32(id)}
 	client := Auction.NewAuctionServiceClient(conn)
 
-	go listenForInput(client, ctx)
+	go user.listenForInput(client, ctx)
 
 	for {
 	}
 }
 
 // client side
-func Bid(client Auction.AuctionServiceClient, ctx context.Context, amount int32) {
-	request := &Auction.BidRequest{Amount: amount, ClientId: clientID}
+func (u *User) Bid(client Auction.AuctionServiceClient, ctx context.Context, amount int32) {
+	request := &Auction.BidRequest{Amount: amount, ClientId: u.userId}
 	response, err := client.Bid(ctx, request)
 	if response.Success {
 		fmt.Println("Bid was successful")
@@ -51,20 +56,20 @@ func Bid(client Auction.AuctionServiceClient, ctx context.Context, amount int32)
 	}
 }
 
-func Result(client Auction.AuctionServiceClient, ctx context.Context) {
+func (u *User) Result(client Auction.AuctionServiceClient, ctx context.Context) {
 	request := &Auction.ResultRequest{}
 	response, err := client.Result(ctx, request)
-	if response.Done {
-		fmt.Printf("The auction is finished. Bidder with id: %v won the auction, with bid: %v", response.BidderID, response.HighestBid)
+	if response.GetDone() {
+		fmt.Printf("The auction is finished. Bidder with id: %v won the auction, with bid: %v", response.GetBidderID(), response.GetHighestBid())
 	} else if err == nil {
-		fmt.Printf("The auction is still going. Current highest bid comes from bidder: %v, who is bidding: %v", response.BidderID, response.HighestBid)
+		fmt.Printf("The auction is still going. Current highest bid comes from bidder: %v, who is bidding: %v", response.GetBidderID(), response.GetHighestBid())
 	} else {
 		fmt.Errorf(err.Error())
 	}
 
 }
 
-func listenForInput(client Auction.AuctionServiceClient, ctx context.Context) {
+func (u *User) listenForInput(client Auction.AuctionServiceClient, ctx context.Context) {
 	for {
 		var input string
 		fmt.Scanln(&input)
@@ -72,24 +77,24 @@ func listenForInput(client Auction.AuctionServiceClient, ctx context.Context) {
 			switch input {
 			case "bid":
 				fmt.Println("How much would you like to bid?")
-				fmt.Scan(&input)
+				fmt.Scanln(&input)
 				bid, err := strconv.Atoi(input)
 				if err != nil {
 					fmt.Errorf("Error: %v", err)
 				} else {
-					fmt.Println(client)
-					Bid(client, ctx, int32(bid))
+					u.Bid(client, ctx, int32(bid))
 				}
 				break
 
 			case "result":
-				Result(client, ctx)
+				u.Result(client, ctx)
 				break
 			}
 		}
 	}
 }
 
+// below is not used
 //*Auction.AuctionServiceClient implement
 func reconnect(client Auction.AuctionServiceClient) {
 	var tempConnected bool
@@ -103,7 +108,7 @@ func reconnect(client Auction.AuctionServiceClient) {
 }
 
 func ConnectAsAuctionClient() (Auction.AuctionServiceClient, bool) {
-	conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
+	conn, err := grpc.Dial(ADDRESS, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
