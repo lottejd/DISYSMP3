@@ -64,11 +64,9 @@ func (feServer *FrontEndServer) EndAuction() {
 		lastBid.done = true
 		fmt.Println(lastBid)
 		feServer.UpdateAllReplicas(lastBid)
-		return
 	} else {
 		time.Sleep(time.Second * AUCTION_DURATION)
 		fmt.Printf("%v status: %s", highestBid, status)
-		feServer.EndAuction()
 	}
 }
 func (feServer *FrontEndServer) Bid(ctx context.Context, message *Auction.BidRequest) (*Auction.BidResponse, error) {
