@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	address     = "localhost:8080"
-	logFileName = "logfile"
+	ADDRESS       = "localhost:8080"
+	LOG_FILE_NAME = "logfile"
 )
 
 type User struct {
@@ -23,7 +23,7 @@ func main() {
 	// init
 	// Set up a connection to the server.
 	ctx := context.Background()
-	conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
+	conn, err := grpc.Dial(ADDRESS, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
@@ -59,10 +59,10 @@ func (u *User) Bid(client Auction.AuctionServiceClient, ctx context.Context, amo
 func (u *User) Result(client Auction.AuctionServiceClient, ctx context.Context) {
 	request := &Auction.ResultRequest{}
 	response, err := client.Result(ctx, request)
-	if response.Done {
-		fmt.Printf("The auction is finished. Bidder with id: %v won the auction, with bid: %v", response.BidderID, response.HighestBid)
+	if response.GetDone() {
+		fmt.Printf("The auction is finished. Bidder with id: %v won the auction, with bid: %v", response.GetBidderID(), response.GetHighestBid())
 	} else if err == nil {
-		fmt.Printf("The auction is still going. Current highest bid comes from bidder: %v, who is bidding: %v", response.BidderID, response.HighestBid)
+		fmt.Printf("The auction is still going. Current highest bid comes from bidder: %v, who is bidding: %v", response.GetBidderID(), response.GetHighestBid())
 	} else {
 		fmt.Errorf(err.Error())
 	}
@@ -108,7 +108,7 @@ func reconnect(client Auction.AuctionServiceClient) {
 }
 
 func ConnectAsAuctionClient() (Auction.AuctionServiceClient, bool) {
-	conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
+	conn, err := grpc.Dial(ADDRESS, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}

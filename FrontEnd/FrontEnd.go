@@ -21,6 +21,7 @@ const (
 	SERVER_PORT             = 5000
 	SERVER_LOG_FILE         = "serverLog"
 	REPLICA_STATUS_RESPONSE = "Alive and well"
+	AUCTION_DURATION        = 3
 )
 
 type AuctionType struct {
@@ -36,29 +37,46 @@ type AuctionFromLog struct {
 
 type FrontEndServer struct {
 	Auction.UnimplementedAuctionServiceServer
-	this               *AuctionType
-	startTime          *time.Time
+	auctionDone        bool
 	replicaServerPorts map[int]bool
 }
 
 func main() {
-	proxyAuction := AuctionType{-1, -1, false}
 	replicaServerMap := make(map[int]bool)
-	startTime := time.Now()
-	feServer := FrontEndServer{this: &proxyAuction, startTime: &startTime, replicaServerPorts: replicaServerMap}
+	feServer := FrontEndServer{auctionDone: false, replicaServerPorts: replicaServerMap}
 
 	go listen(&feServer)
+	go feServer.StartAuction()
 	for {
 		feServer.FindReplicasAndAddThemToMap()
 	}
 }
+func (feServer *FrontEndServer) StartAuction() {
+	time.Sleep(time.Minute * AUCTION_DURATION)
+	feServer.auctionDone = true
+	feServer.EndAuction()
+}
 
+func (feServer *FrontEndServer) EndAuction() {
+	highestBid, status := feServer.GetHighestBidFromReplicas()
+	if strings.Contains(status, "succesfully") {
+		lastBid := highestBid
+		lastBid.done = true
+		fmt.Println(lastBid)
+		feServer.UpdateAllReplicas(lastBid)
+		return
+	} else {
+		time.Sleep(time.Second * AUCTION_DURATION)
+		fmt.Printf("%v status: %s", highestBid, status)
+		feServer.EndAuction()
+	}
+}
 func (feServer *FrontEndServer) Bid(ctx context.Context, message *Auction.BidRequest) (*Auction.BidResponse, error) {
-	currentBid, status := feServer.GetHighestBidFromReplicas() // implement
+	currentBid, status := feServer.GetHighestBidFromReplicas()
 	fmt.Println(status)
 
 	newBid := message.GetAmount()
-	if currentBid.Bid < newBid && !feServer.EvalAuctionDone(time.Now()) {
+	if currentBid.Bid < newBid && !feServer.auctionDone {
 		feServer.UpdateBid(newBid, message.GetClientId())
 		return &Auction.BidResponse{Success: true}, nil
 	}
@@ -67,18 +85,18 @@ func (feServer *FrontEndServer) Bid(ctx context.Context, message *Auction.BidReq
 }
 
 func (feServer *FrontEndServer) Result(ctx context.Context, message *Auction.ResultRequest) (*Auction.ResultResponse, error) {
-	currentBid, status := feServer.GetHighestBidFromReplicas() // implement
-	status = "Succes still going"
+	currentBid, status := feServer.GetHighestBidFromReplicas()
 	err := errors.New("couldn't find any bids on the running auction")
 	var response Auction.ResultResponse
-	switch status {
-	case "Failed":
-		return &Auction.ResultResponse{BidderID: -1, HighestBid: -1, Done: false}, err
-	case "Succes still going":
-		response = Auction.ResultResponse{BidderID: currentBid.Bidder, HighestBid: currentBid.Bid, Done: false}
-	case "Succes done":
+	if currentBid.done {
 		response = Auction.ResultResponse{BidderID: currentBid.Bidder, HighestBid: currentBid.Bid, Done: true}
+	} else if strings.Contains(status, "succesfully") {
+
+		response = Auction.ResultResponse{BidderID: currentBid.Bidder, HighestBid: currentBid.Bid, Done: false}
+	} else if strings.Contains(status, "replicas couldnt") {
+		return &Auction.ResultResponse{BidderID: -1, HighestBid: -1, Done: false}, err
 	}
+
 	return &response, nil
 
 }
@@ -86,8 +104,7 @@ func (feServer *FrontEndServer) Result(ctx context.Context, message *Auction.Res
 func (feServer *FrontEndServer) UpdateBid(bid int32, bidderId int32) {
 
 	newAuction := AuctionType{Bid: bid, Bidder: bidderId, done: false}
-	msg := feServer.UpdateAllReplicas(newAuction) // implement
-	feServer.this = &newAuction
+	msg := feServer.UpdateAllReplicas(newAuction)
 	fmt.Println(msg)
 }
 
@@ -104,12 +121,11 @@ func (feServer *FrontEndServer) CreateAuctionFromLog(logMsg string) AuctionFromL
 			replicaPort, _ = strconv.Atoi(splitMsg[i+1])
 		}
 	}
-	auction := AuctionType{Bid: int32(bid), Bidder: int32(bidder), done: feServer.EvalAuctionDone(time.Now())}
+	auction := AuctionType{Bid: int32(bid), Bidder: int32(bidder), done: feServer.auctionDone}
 	return AuctionFromLog{latestAuction: auction, replicaPort: int32(replicaPort)}
 }
 
 func (feServer *FrontEndServer) GetHighestBidFromReplicas() (AuctionType, string) {
-	// implement
 	// get bid from all replicas maybe use timestamps or just r = w = n-1/2
 	// the value repeating the most or quorum wins
 	latestLogs := feServer.ReadFromLog()
@@ -122,12 +138,26 @@ func (feServer *FrontEndServer) GetHighestBidFromReplicas() (AuctionType, string
 		}
 	}
 
+	Quorom := make(map[AuctionType]int)
 	for _, auctions := range latestAuctionsFromLogs {
 		if auctions.replicaPort >= 5000 {
 			fmt.Println(auctions)
+			auction := auctions.latestAuction
+			temp := Quorom[auction]
+			Quorom[auction] = (temp + 1)
 		}
 	}
-	return *feServer.this, "succesfully got the bid from client" // replicas
+	sizeOfMap := 0
+	for _, amountVotes := range Quorom {
+		sizeOfMap += amountVotes
+	}
+	for auction, amountVotes := range Quorom {
+		if amountVotes > sizeOfMap/2 {
+			return auction, "succesfully got the bid from more than half of the replicas"
+		}
+
+	}
+	return AuctionType{}, "replicas couldnt agree on a bid" // replicas
 }
 
 func (feServer *FrontEndServer) ReadFromLog() []string {
@@ -207,13 +237,6 @@ func (feServer *FrontEndServer) FindReplicasAndAddThemToMap() {
 		counter++
 	}
 	ctx.Done()
-}
-
-func (feServer *FrontEndServer) EvalAuctionDone(current time.Time) bool {
-
-	fmt.Println(feServer.startTime.Format(time.Stamp))
-	fmt.Println(current.Format(time.Stamp))
-	return false // implement
 }
 
 // grcp server setup
