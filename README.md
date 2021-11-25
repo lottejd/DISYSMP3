@@ -9,8 +9,8 @@
 
 # Be aware 
 * The auction ends 3 minutes after the front end starts 
-* restarting the front end restart the auction timer but doesnt clear the logs
-* previous logs will be included, so delete these before starting a new auction   
+* restarting the front end restarts the auction timer, but doesn't clear the logs
+* previous logs will be included when front end starts, so delete these before starting a new auction   
 
 # Proto commands
 
