@@ -31,7 +31,6 @@ func main() {
 
 	// create client
 	var id int32
-
 	fmt.Println("Choose an integer as id:")
 	fmt.Scanln(&id)
 	user := User{userId: int32(id)}
@@ -54,8 +53,6 @@ func (u *User) Bid(client Auction.AuctionServiceClient, ctx context.Context, amo
 		if (response.GetDone() || response.GetHighestBid() == 0) && err == nil {
 			reply = u.Result(client, ctx)
 		} else {
-			fmt.Println(response.GetHighestBid())
-			fmt.Println(err.Error())
 			reply = "Bid was not successful. Check if your bid was an int, and higher than the current bid"
 		}
 	}
@@ -76,7 +73,7 @@ func (u *User) Result(client Auction.AuctionServiceClient, ctx context.Context) 
 		if err != nil {
 			fmt.Errorf(err.Error())
 		}
-		reply = "There has been no bids yet"
+		reply = "There is no accepted bid yet"
 	}
 	return reply
 }
