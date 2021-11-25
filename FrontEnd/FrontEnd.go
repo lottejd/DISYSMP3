@@ -89,7 +89,6 @@ func (feServer *FrontEndServer) Result(ctx context.Context, message *Auction.Res
 	if currentBid.done {
 		response = Auction.ResultResponse{BidderID: currentBid.Bidder, HighestBid: currentBid.Bid, Done: true}
 	} else if strings.Contains(status, "succesfully") {
-
 		response = Auction.ResultResponse{BidderID: currentBid.Bidder, HighestBid: currentBid.Bid, Done: false}
 	} else if strings.Contains(status, "replicas couldnt") {
 		return &Auction.ResultResponse{BidderID: -1, HighestBid: -1, Done: false}, err
@@ -100,7 +99,6 @@ func (feServer *FrontEndServer) Result(ctx context.Context, message *Auction.Res
 }
 
 func (feServer *FrontEndServer) UpdateBid(bid int32, bidderId int32) {
-
 	newAuction := AuctionType{Bid: bid, Bidder: bidderId, done: false}
 	msg := feServer.UpdateAllReplicas(newAuction)
 	fmt.Println(msg)
@@ -155,12 +153,12 @@ func (feServer *FrontEndServer) GetHighestBidFromReplicas() (AuctionType, string
 		}
 
 	}
-	return AuctionType{Bid: -1, Bidder: -1, done: true}, "replicas couldnt agree on a bid" // replicas
+	return AuctionType{Bid: -1, Bidder: -1, done: true}, "replicas couldn't agree on the current bid"
 }
 
 func (feServer *FrontEndServer) ReadFromLog() []string {
 	replicaMsgs := make([]string, len(feServer.replicaServerPorts))
-	err := os.Chdir("../Server") // læs fra server directory
+	err := os.Chdir("../Server")
 	if err != nil {
 		fmt.Println(err.Error())
 	}
@@ -172,7 +170,7 @@ func (feServer *FrontEndServer) ReadFromLog() []string {
 			}
 
 			var latestMsg string
-			go t.StopAtEOF() // stop after last line has been read
+			go t.StopAtEOF()
 
 			for line := range t.Lines {
 				latestMsg = line.Text
@@ -185,6 +183,7 @@ func (feServer *FrontEndServer) ReadFromLog() []string {
 
 }
 
+// update all replica logs
 func (feServer *FrontEndServer) UpdateAllReplicas(auction AuctionType) string {
 	failedWrites := 0
 	ctx := context.Background()
@@ -205,14 +204,13 @@ func (feServer *FrontEndServer) UpdateAllReplicas(auction AuctionType) string {
 			}
 		}
 	}
-	fmt.Println(failedWrites)
 	if failedWrites < len(feServer.replicaServerPorts)/2 {
 		return "succesfully updated replica logs"
 	}
 	return "failed to update more than half of the replicas"
 }
 
-// find replicas and add
+// find replicas and add to map
 func (feServer *FrontEndServer) FindReplicasAndAddThemToMap() {
 	ctx := context.Background()
 	counter := 0
@@ -229,7 +227,6 @@ func (feServer *FrontEndServer) FindReplicasAndAddThemToMap() {
 				feServer.replicaServerPorts[port] = false
 			} else if response.GetMsg() == REPLICA_STATUS_RESPONSE {
 				feServer.replicaServerPorts[port] = true
-				// fmt.Printf("found port: %v\n", port)
 			}
 		}
 		counter++
