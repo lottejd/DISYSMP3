@@ -50,7 +50,14 @@ func (u *User) Bid(client Auction.AuctionServiceClient, ctx context.Context, amo
 	} else if err != nil {
 		fmt.Errorf(err.Error())
 	} else {
-		reply = "Bid was not successful. Check if your bid was an int, and higher than the current bid"
+		response, err := client.Result(ctx, &Auction.ResultRequest{})
+		if (response.GetDone() || response.GetHighestBid() == 0) && err == nil {
+			reply = u.Result(client, ctx)
+		} else {
+			fmt.Println(response.GetHighestBid())
+			fmt.Println(err.Error())
+			reply = "Bid was not successful. Check if your bid was an int, and higher than the current bid"
+		}
 	}
 	return reply
 }
@@ -59,12 +66,16 @@ func (u *User) Result(client Auction.AuctionServiceClient, ctx context.Context) 
 	request := &Auction.ResultRequest{}
 	response, err := client.Result(ctx, request)
 	var reply string
-	if response.GetDone() {
-		reply = fmt.Sprintf("The auction is finished. Bidder with id: %v won the auction, with bid: %v", response.GetBidderID(), response.GetHighestBid())
-	} else if err == nil {
-		reply = fmt.Sprintf("The auction is still going. Current highest bid comes from bidder: %v, who is bidding: %v", response.GetBidderID(), response.GetHighestBid())
+	if response.GetHighestBid() != -1 {
+		if response.GetDone() {
+			reply = fmt.Sprintf("The auction is finished. Bidder with id: %v won the auction, with bid: %v", response.GetBidderID(), response.GetHighestBid())
+		} else if err == nil {
+			reply = fmt.Sprintf("The auction is still going. Current highest bid comes from bidder: %v, who is bidding: %v", response.GetBidderID(), response.GetHighestBid())
+		}
 	} else {
-		fmt.Errorf(err.Error())
+		if err != nil {
+			fmt.Errorf(err.Error())
+		}
 		reply = "There has been no bids yet"
 	}
 	return reply

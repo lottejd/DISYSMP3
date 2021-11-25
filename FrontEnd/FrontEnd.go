@@ -155,7 +155,7 @@ func (feServer *FrontEndServer) GetHighestBidFromReplicas() (AuctionType, string
 		}
 
 	}
-	return AuctionType{}, "replicas couldnt agree on a bid" // replicas
+	return AuctionType{Bid: -1, Bidder: -1, done: true}, "replicas couldnt agree on a bid" // replicas
 }
 
 func (feServer *FrontEndServer) ReadFromLog() []string {
