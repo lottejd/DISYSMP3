@@ -17,11 +17,14 @@ import (
 )
 
 const (
-	CLIENT_PORT             = 8080
-	SERVER_PORT             = 5000
-	SERVER_LOG_FILE         = "serverLog"
-	REPLICA_STATUS_RESPONSE = "Alive and well"
-	AUCTION_DURATION        = 3
+	CLIENT_PORT                      = 8080
+	SERVER_PORT                      = 5000
+	SERVER_LOG_FILE                  = "serverLog"
+	REPLICA_STATUS_RESPONSE          = "Alive and well"
+	AUCTION_DURATION                 = 3
+	MAJORITY_OF_REPLICAS_AGREED      = "succesfully got the bid from more than half of the replicas"
+	NO_MAJORITY_COULD_NOT_BE_REACHED = "replicas couldn't agree on the current bid"
+	SERVER_LOG_DIRECTORY             = "../Server"
 )
 
 type AuctionType struct {
@@ -136,7 +139,7 @@ func (feServer *FrontEndServer) GetHighestBidFromReplicas() (AuctionType, string
 
 	Quorom := make(map[AuctionType]int)
 	for _, auctions := range latestAuctionsFromLogs {
-		if auctions.replicaPort >= 5000 {
+		if auctions.replicaPort >= SERVER_PORT {
 			fmt.Println(auctions)
 			auction := auctions.latestAuction
 			temp := Quorom[auction]
@@ -149,16 +152,16 @@ func (feServer *FrontEndServer) GetHighestBidFromReplicas() (AuctionType, string
 	}
 	for auction, amountVotes := range Quorom {
 		if amountVotes > sizeOfMap/2 {
-			return auction, "succesfully got the bid from more than half of the replicas"
+			return auction, MAJORITY_OF_REPLICAS_AGREED
 		}
 
 	}
-	return AuctionType{Bid: -1, Bidder: -1, done: true}, "replicas couldn't agree on the current bid"
+	return AuctionType{Bid: -1, Bidder: -1, done: true}, NO_MAJORITY_COULD_NOT_BE_REACHED
 }
 
 func (feServer *FrontEndServer) ReadFromLog() []string {
 	replicaMsgs := make([]string, len(feServer.replicaServerPorts))
-	err := os.Chdir("../Server")
+	err := os.Chdir(SERVER_LOG_DIRECTORY)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
