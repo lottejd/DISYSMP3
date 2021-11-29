@@ -11,8 +11,10 @@ import (
 )
 
 const (
-	ADDRESS       = "localhost:8080"
-	LOG_FILE_NAME = "logfile"
+	ADDRESS        = "localhost:8080"
+	LOG_FILE_NAME  = "logfile"
+	BID_UNSUCCEFUL = "Bid was not successful. Check if your bid was an int, and higher than the current bid"
+	NO_BID_YET     = "There is no accepted bid yet"
 )
 
 type User struct {
@@ -53,7 +55,7 @@ func (u *User) Bid(client Auction.AuctionServiceClient, ctx context.Context, amo
 		if (response.GetDone() || response.GetHighestBid() == 0) && err == nil {
 			reply = u.Result(client, ctx)
 		} else {
-			reply = "Bid was not successful. Check if your bid was an int, and higher than the current bid"
+			reply = BID_UNSUCCEFUL
 		}
 	}
 	return reply
@@ -73,7 +75,7 @@ func (u *User) Result(client Auction.AuctionServiceClient, ctx context.Context) 
 		if err != nil {
 			fmt.Errorf(err.Error())
 		}
-		reply = "There is no accepted bid yet"
+		reply = NO_BID_YET
 	}
 	return reply
 }
@@ -86,12 +88,14 @@ func (u *User) listenForInput(client Auction.AuctionServiceClient, ctx context.C
 			switch input {
 			case "bid":
 				fmt.Println("How much would you like to bid?")
-				fmt.Scanln(&input)
-				bid, err := strconv.Atoi(input)
-				if err != nil {
+				var bid string
+				fmt.Scanln(&bid)
+				bidAmount, err := strconv.Atoi(bid)
+				if err != nil || len(bid) == 0 {
+					fmt.Println("Bad input only integers allowed")
 					fmt.Errorf("Error: %v", err)
 				} else {
-					fmt.Println(u.Bid(client, ctx, int32(bid)))
+					fmt.Println(u.Bid(client, ctx, int32(bidAmount)))
 				}
 				break
 

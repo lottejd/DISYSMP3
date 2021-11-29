@@ -139,7 +139,7 @@ func (feServer *FrontEndServer) GetHighestBidFromReplicas() (AuctionType, string
 
 	Quorom := make(map[AuctionType]int)
 	for _, auctions := range latestAuctionsFromLogs {
-		if auctions.replicaPort >= 5000 {
+		if auctions.replicaPort >= SERVER_PORT {
 			fmt.Println(auctions)
 			auction := auctions.latestAuction
 			temp := Quorom[auction]

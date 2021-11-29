@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	SERVER_PORT          = 5000
-	SERVER_LOG_FILE      = "serverLog"
+	SERVER_PORT     = 5000
+	SERVER_LOG_FILE = "serverLog"
 	MAX_REPLICAS_ALLOWED = 10
 )
 
