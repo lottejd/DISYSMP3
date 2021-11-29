@@ -12,6 +12,7 @@ import (
 const (
 	SERVER_PORT     = 5000
 	SERVER_LOG_FILE = "serverLog"
+	MAX_REPLICAS_ALLOWED = 10
 )
 
 type Server struct {
@@ -36,7 +37,7 @@ func main() {
 
 func FindFreePort() int32 {
 	ctx := context.Background()
-	for i := 0; i < 10; i++ {
+	for i := 0; i < MAX_REPLICAS_ALLOWED; i++ {
 		conn, status := Connect(SERVER_PORT + i)
 		if status == "succes" {
 			_, ack := ConnectToReplicaClient(conn)
