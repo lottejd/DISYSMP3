@@ -52,6 +52,7 @@ func main() {
 	go feServer.StartAuction()
 	for {
 		feServer.FindReplicasAndAddThemToMap()
+		time.Sleep(5 * time.Second) // avoid starting crazy amount of routines
 	}
 }
 func (feServer *FrontEndServer) StartAuction() {
