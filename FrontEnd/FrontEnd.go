@@ -17,14 +17,14 @@ import (
 )
 
 const (
-	CLIENT_PORT                      = 8080
-	SERVER_PORT                      = 5000
-	SERVER_LOG_FILE                  = "serverLog"
-	REPLICA_STATUS_RESPONSE          = "Alive and well"
-	AUCTION_DURATION                 = 3
-	MAJORITY_OF_REPLICAS_AGREED      = "succesfully got the bid from more than half of the replicas"
-	NO_MAJORITY_COULD_NOT_BE_REACHED = "replicas couldn't agree on the current bid"
-	SERVER_LOG_DIRECTORY             = "../Server"
+	CLIENT_PORT              = 8080
+	SERVER_PORT              = 5000
+	SERVER_LOG_FILE          = "serverLog"
+	REPLICA_STATUS_RESPONSE  = "Alive and well"
+	AUCTION_DURATION         = 3
+	SUCCESFUL_MAJORITY       = "succesfully got the bid from more than half of the replicas"
+	MAJORITY_WAS_UNSUCCESFUL = "replicas couldn't agree on the current bid"
+	SERVER_LOG_DIRECTORY     = "../Server"
 )
 
 type AuctionType struct {
@@ -153,11 +153,11 @@ func (feServer *FrontEndServer) GetHighestBidFromReplicas() (AuctionType, string
 	}
 	for auction, amountVotes := range Quorom {
 		if amountVotes > sizeOfMap/2 {
-			return auction, MAJORITY_OF_REPLICAS_AGREED
+			return auction, SUCCESFUL_MAJORITY
 		}
 
 	}
-	return AuctionType{Bid: -1, Bidder: -1, done: true}, NO_MAJORITY_COULD_NOT_BE_REACHED
+	return AuctionType{Bid: -1, Bidder: -1, done: true}, MAJORITY_WAS_UNSUCCESFUL
 }
 
 func (feServer *FrontEndServer) ReadFromLog() []string {
